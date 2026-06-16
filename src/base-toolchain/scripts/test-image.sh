@@ -27,6 +27,62 @@ run_image() {
     "$@"
 }
 
+run_rust_compile_smoke() {
+  local image="$1"
+
+  docker run --rm \
+    --network=none \
+    --user root \
+    "${image}" \
+    bash -s <<'RUST_SMOKE'
+set -euo pipefail
+
+cat > /tmp/rustc-smoke.rs <<'RS'
+fn main() {
+    println!("{}", 40 + 2);
+}
+RS
+rustc --edition=2021 /tmp/rustc-smoke.rs -o /tmp/rustc-smoke
+test "$(/tmp/rustc-smoke)" = "42"
+
+mkdir -p /tmp/cargo-smoke/src
+cat > /tmp/cargo-smoke/Cargo.toml <<'TOML'
+[package]
+name = "cargo-smoke"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+TOML
+cat > /tmp/cargo-smoke/src/main.rs <<'RS'
+fn answer() -> i32 {
+    40 + 2
+}
+
+fn main() {
+    println!("{}", answer());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::answer;
+
+    #[test]
+    fn computes_the_answer() {
+        assert_eq!(answer(), 42);
+    }
+}
+RS
+
+cd /tmp/cargo-smoke
+cargo test --offline
+test "$(cargo run --offline --quiet)" = "42"
+cargo clippy --offline --all-targets -- -D warnings
+cargo fmt --check
+echo "Rust compile smoke test complete."
+RUST_SMOKE
+}
+
 docker run --rm \
   --network=none \
   --user root \
@@ -96,6 +152,7 @@ run_image "${BASE_TOOLCHAIN_IMAGE}" cargo --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" rustfmt --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" cargo clippy --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" rustup component list --installed
+run_rust_compile_smoke "${BASE_TOOLCHAIN_IMAGE}"
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3 --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 -m pip --version

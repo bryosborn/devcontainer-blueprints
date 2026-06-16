@@ -31,7 +31,7 @@ docker run --rm \
   --network=none \
   -e "EXPECTED_RUST_TOOLCHAIN=${RUST_TOOLCHAIN}" \
   "${IMAGE_TAG}" \
-  bash -lc '
+  bash -s <<'RUST_SMOKE'
   set -euo pipefail
   test "${RUSTUP_HOME}" = "/usr/local/rustup"
   test "${CARGO_HOME}" = "/usr/local/cargo"
@@ -49,7 +49,51 @@ docker run --rm \
     "${EXPECTED_RUST_TOOLCHAIN}"*) ;;
     *) echo "ERROR: Rust default toolchain does not match ${EXPECTED_RUST_TOOLCHAIN}" >&2; exit 1 ;;
   esac
-'
+
+  cat > /tmp/rustc-smoke.rs <<'RS'
+fn main() {
+    println!("{}", 40 + 2);
+}
+RS
+  rustc --edition=2021 /tmp/rustc-smoke.rs -o /tmp/rustc-smoke
+  test "$(/tmp/rustc-smoke)" = "42"
+
+  mkdir -p /tmp/cargo-smoke/src
+  cat > /tmp/cargo-smoke/Cargo.toml <<'TOML'
+[package]
+name = "cargo-smoke"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+TOML
+  cat > /tmp/cargo-smoke/src/main.rs <<'RS'
+fn answer() -> i32 {
+    40 + 2
+}
+
+fn main() {
+    println!("{}", answer());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::answer;
+
+    #[test]
+    fn computes_the_answer() {
+        assert_eq!(answer(), 42);
+    }
+}
+RS
+
+  cd /tmp/cargo-smoke
+  cargo test --offline
+  test "$(cargo run --offline --quiet)" = "42"
+  cargo clippy --offline --all-targets -- -D warnings
+  cargo fmt --check
+  echo "Rust compile smoke test complete."
+RUST_SMOKE
 
 read -r -a rust_components <<< "${RUST_COMPONENTS:-}"
 for component in "${rust_components[@]}"; do
