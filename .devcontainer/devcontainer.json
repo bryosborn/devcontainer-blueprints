@@ -1,0 +1,28 @@
+{
+  "name": "Devcontainer Blueprints Bootstrap",
+
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "remoteUser": "vscode",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "chatgpt.chatgpt-vscode",
+        "ms-vscode-remote.remote-containers",
+        "timonwong.shellcheck"
+      ]
+    }
+  },
+
+  "postCreateCommand": "npm install -g @devcontainers/cli"
+}
