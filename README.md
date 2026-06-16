@@ -1,38 +1,60 @@
 # Dev Container Blueprints
 
-A local-first, offline-capable Dev Container Template repository.
+A local-first Dev Container Template playground for reproducing a `cicd-common`-style development environment in smaller layers.
 
-This repository demonstrates a minimal pattern:
+Planned shape:
 
 ```text
-online prefetch phase
-  -> local artifact cache
-  -> local Docker registry
-  -> offline Docker build
-  -> local Dev Container Template
+mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+  -> base-dod image with Docker-outside-of-Docker only
 ```
 
 ## Concepts
 
-This repo separates three ideas:
+This repo separates these ideas:
 
 ```text
 Template ID  = logical Dev Container Template identity
-Docker image = reusable build layer
-Artifacts    = locally cached install inputs
-Registry     = where Docker images are pushed and pulled
+Docker image = reusable base layer stored by Docker
+Feature      = Dev Container Feature applied to an image/template
+Docker daemon image store = where ordinary local builds and tags live
+Registry     = optional remote or local service for pushed/pulled images
 ```
 
-Example:
+Current/default coordinates live in `docker.env`:
 
 ```text
-Template ID:       simple-dev
-Template path:     src/simple-dev
-Base image:        localhost:5000/devcontainers/dev-base:0.1.0
-Mirrored upstream: localhost:5000/upstream/devcontainers/base:ubuntu
+REGISTRY:            devcontainers
+BASE_IMAGE_NAME:     base-dod
+BASE_IMAGE_VERSION:  0.1.0
+UPSTREAM_BASE_IMAGE: mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+BASE_IMAGE:          devcontainers/base-dod:0.1.0
 ```
 
-The template ID does not need to match the Docker image name.
+`REGISTRY` is used as an image prefix. For local daemon-only builds it can be just a namespace like `devcontainers`; for a registry workflow it can include a host and path like `localhost:5001/devcontainers`.
+
+The `base-dod` image contains only Docker-outside-of-Docker on top of the upstream base image, installed by the Dev Container Feature installer, with Moby disabled:
+
+```text
+ghcr.io/devcontainers/features/docker-outside-of-docker:1.10.0
+docker-ce-cli=29.5.3-1
+docker-compose=2.40.3
+docker-buildx-plugin=0.34.1-1
+moby=false
+feature installDockerComposeSwitch=false
+compose-switch=1.0.5
+```
+
+These are the Docker-related runtime versions observed in the DOD container when the feature was allowed to install the latest packages. The Dev Container Feature supports the Docker CLI version pin directly. Its Compose option is limited to `none`, `latest`, `v1`, or `v2`, and its exact Buildx pin only applies to the Moby package path, so `docker.env` records the observed Compose and Buildx versions even though the DOD feature does not expose exact Docker CE package pins for those two installs. The upstream feature installs compose-switch as `latest`, so the build script disables that path and adds pinned compose-switch `1.0.5` in a final image layer.
+
+The image metadata also sets:
+
+```text
+remoteUser=vscode
+updateRemoteUserUID=true
+```
+
+Scripts default to `docker.env` in the repo root. To use a private override file, set `DOCKER_ENV_FILE`; relative paths are resolved from the repo root.
 
 ## Prerequisites
 
@@ -52,120 +74,64 @@ npm install -g @devcontainers/cli
 
 This repo includes its own `.devcontainer` folder so it can be opened in VS Code as a development container.
 
-The bootstrap devcontainer uses:
+The bootstrap devcontainer uses the same base family as the `cicd-common` reference:
 
 ```text
-mcr.microsoft.com/devcontainers/base:ubuntu
+mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
 ```
 
 It also includes Docker-outside-of-Docker and Node so the container can run Docker commands through the host Docker daemon and install/use the Dev Container CLI.
 
-## One-Time Local Registry Start
+## Current Scripts
+
+Pull the configured upstream base image:
 
 ```bash
-./scripts/start-local-registry.sh
+./scripts/pull-upstream-base-image.sh
 ```
 
-This starts a local Docker registry at:
-
-```text
-localhost:5000
-```
-
-## Online Preparation
-
-Run this while connected to the internet:
+Build the DOD-only base image:
 
 ```bash
-./scripts/mirror-base-images.sh
-./scripts/prefetch-artifacts.sh
+./scripts/build-base-dod.sh
 ```
 
-This does two things:
+The build script applies the configured DOD feature to `UPSTREAM_BASE_IMAGE` and tags the result as `BASE_IMAGE`.
 
-1. Pulls the upstream Microsoft Dev Container base image and pushes it into the local registry.
-2. Downloads required `.deb` package artifacts into `artifacts/apt/debs/`.
-
-## Build the Base Image Online
+Smoke test the DOD-only base image:
 
 ```bash
-./scripts/build-images.sh
+./scripts/test-base-dod.sh
 ```
-
-This builds:
-
-```text
-localhost:5000/devcontainers/dev-base:0.1.0
-```
-
-## Push the Base Image to the Local Registry
-
-```bash
-./scripts/push-images.sh
-```
-
-## Test Offline Build
-
-After prefetching artifacts and mirroring the upstream base image, test the offline build:
-
-```bash
-./scripts/build-images-offline.sh
-```
-
-This uses:
-
-```bash
-docker build --network=none
-```
-
-If this succeeds, the image build is not reaching out to the internet.
 
 ## Static Checks
 
 ```bash
-jq empty .devcontainer/devcontainer.json src/simple-dev/devcontainer-template.json src/simple-dev/.devcontainer/devcontainer.json
-for script in scripts/*.sh; do bash -n "$script"; done
-shellcheck -x scripts/*.sh
-find scripts -maxdepth 1 -type f -name '*.sh' -printf '%m %p\n' | sort
+jq empty .devcontainer/devcontainer.json .devcontainer/devcontainer-lock.json
+find scripts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+shellcheck -x scripts/*.sh scripts/lib/*.sh
+find scripts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
-## Test the `simple-dev` Template
+## Optional Registry Workflow
 
-```bash
-./scripts/test-simple-dev.sh
-```
-
-This creates a temporary test workspace, applies the `src/simple-dev` template, and builds the resulting dev container.
-
-Some Dev Container CLI versions only accept OCI template references for `devcontainer templates apply`.
-The test script first tries the CLI path-based apply, then falls back to applying the local template files directly.
-
-## Typical Full Local Workflow
+The default workflow does not need a registry. If you want to test push/pull behavior, start a local registry on port `5001`:
 
 ```bash
 ./scripts/start-local-registry.sh
-./scripts/mirror-base-images.sh
-./scripts/prefetch-artifacts.sh
-./scripts/build-images.sh
-./scripts/push-images.sh
-./scripts/build-images-offline.sh
-./scripts/test-simple-dev.sh
 ```
 
-## Retargeting to Nexus Later
+Copy the local-registry example to an ignored local override:
 
-Copy `config/registry.nexus.example.env` to a real local file and edit it.
-
-Example future image target:
-
-```text
-nexus.company.com/repository/docker-dev/devcontainers/dev-base:0.1.0
+```bash
+cp docker.local.example.env docker.local.env
 ```
 
-The template ID remains:
+Then run scripts with the override. This pulls the upstream Microsoft base image into the host daemon, builds `BASE_IMAGE`, and pushes that built image to the local registry:
 
-```text
-simple-dev
+```bash
+DOCKER_ENV_FILE=docker.local.env ./scripts/pull-upstream-base-image.sh
+DOCKER_ENV_FILE=docker.local.env ./scripts/build-base-dod.sh
 ```
 
-Only registry/image references change.
+Port `5001` is used because host port `5000` is commonly occupied by AirPlay Receiver on macOS.

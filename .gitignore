@@ -1,16 +1,14 @@
 # Local scratch/test workspaces
 .tmp/
 scratch-project/
+cicd-common/
+cicd-common.zip
 
 # OS/editor noise
 .DS_Store
 .idea/
 
 # Local env overrides
-config/*.local.env
-!config/registry.local.env
-
-# Keep artifact directories, but ignore downloaded artifacts by default.
-# Comment these out if the intent is to commit artifacts for fully portable offline builds.
-artifacts/apt/debs/*.deb
-artifacts/checksums/*.sha256
+.env
+*.local.env
+!*.local.example.env
