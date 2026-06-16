@@ -66,12 +66,13 @@ Default config:      docker.env
 - `cicd-common/`: Ignored reference extraction from `cicd-common.zip`; do not edit or stage.
 - `src/apt-artifacts/`: APT package root list and scripts for prefetching `.deb` artifacts into a local file-backed apt repo, then testing offline install with `docker build --network=none`.
 - `config/toolchain.env`: Central version/hash knobs for modular toolchain artifact downloads.
-- `src/tool-artifacts/`: Modular toolchain artifact workflow. Current modules cover Java/Maven, Node, and CLI tools.
+- `src/tool-artifacts/`: Modular toolchain artifact workflow. Current modules cover Java/Maven, Node, CLI tools, MongoDB client tools, and Rust.
 - `src/tool-artifacts/scripts/prefetch-all.sh`: Online step that downloads all current toolchain module artifacts into `artifacts/toolchain/`.
 - `src/tool-artifacts/scripts/test-all.sh`: Runs each current toolchain module's offline install test.
 - `src/base-toolchain/`: Composed image layer extending `BASE_VSCODE_IMAGE` with APT, toolchain, and VS Code extension artifacts installed offline.
 - `src/base-toolchain/scripts/build-image.sh`: Builds `BASE_TOOLCHAIN_IMAGE` with `docker build --network=none` and named BuildKit artifact contexts.
 - `src/base-toolchain/scripts/test-image.sh`: Smoke tests the composed image, including Python 3.12/3.13, Java/Maven, Node, CLI tools, VS Code Server/extensions, and DOD CLI-only behavior.
+- `src/base-toolchain/scripts/compare-cicd-common.sh`: Checks composed image paths, symlinks, env vars, versions, VS Code Server layout, and Rust components against the local `cicd-common` reference intent.
 
 ## Design Rules
 
@@ -91,7 +92,7 @@ Default config:      docker.env
 - Toolchain versions should live in `config/toolchain.env`. Hashes are optional while exploring, but filled-in hash values are strict verification pins.
 - Toolchain modules should remain split by install shape under `src/tool-artifacts/`. Docker build tests should use BuildKit bind mounts for `artifacts/toolchain/` so raw downloaded archives do not become image layers.
 - `base-toolchain` composes existing artifact workflows; keep source install helpers modular and bring artifacts in with named BuildKit contexts instead of copying raw caches into the build workspace.
-- Python 3.12/3.13 come from the APT artifact layer as `python3.12-full` and `python3.13-full`. The composed image tests interpreter and `venv` availability, but global `pip` for those versions is not assumed.
+- Python 3.12/3.13 come from the APT artifact layer as `python3.12-full` and `python3.13-full`. The composed image unpacks bundled pip wheels into global dist-packages and exposes `python3.12 -m pip`, `python3.13 -m pip`, `pip3.12`, and `pip3.13`.
 - The Docker-outside-of-Docker feature should use `moby=false`.
 - The final DOD image should include compose-switch pinned by `DOD_COMPOSE_SWITCH_VERSION`. The upstream Docker-outside-of-Docker feature installs compose-switch as `latest`, so keep `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false` and add the pinned switch in the build script's final image layer.
 - `docker.env` records the Docker runtime versions observed from the DOD feature when it installed latest packages: Docker CLI `29.5.3-1`, Compose `2.40.3`, and Buildx `0.34.1-1`. The feature supports the Docker CLI pin directly; exact Compose and Docker CE Buildx pins are reference values because the feature schema does not expose exact Docker CE package version options for them.
@@ -139,6 +140,7 @@ Current online preparation:
 ./src/tool-artifacts/scripts/test-all.sh
 ./src/base-toolchain/scripts/build-image.sh
 ./src/base-toolchain/scripts/test-image.sh
+./src/base-toolchain/scripts/compare-cicd-common.sh
 ```
 
 ## Change Hygiene
@@ -183,4 +185,7 @@ Current lessons:
 - 2026-06-16 - Decision: Remote development extension pack members classify as host-only and are locked but not installed into the container by default.
 - 2026-06-16 - Decision: Toolchain artifact support lives under `src/tool-artifacts/`, with easy version/hash knobs in `config/toolchain.env` and module install tests that bind-mount artifacts during Docker builds.
 - 2026-06-16 - Decision: `src/base-toolchain` composes the existing offline artifact workflows into `BASE_TOOLCHAIN_IMAGE` using named BuildKit contexts and `docker build --network=none`.
-- 2026-06-16 - Finding: Python 3.12/3.13 are available from the APT artifact layer with `venv`; global `pip` for those interpreters is not present unless added intentionally later.
+- 2026-06-16 - Finding: Python 3.12/3.13 are available from the APT artifact layer with `venv`; the composed image now adds global pip wrappers from the bundled ensurepip wheels.
+- 2026-06-16 - Decision: The composed image sets `JAVA_HOME=/opt/java`, fixes kubectl and yq symlinks to match the `cicd-common` install paths, and adds global pip wrappers for Python 3.12/3.13.
+- 2026-06-16 - Decision: MongoDB client parity is scoped to `mongosh` and MongoDB Database Tools only; MongoDB server packages are intentionally out of scope.
+- 2026-06-16 - Decision: Rust is prefetched by installing the pinned `nightly-2026-04-11` toolchain and required components into artifact-owned Rust/Cargo homes, then copied offline into `/usr/local/rustup` and `/usr/local/cargo`.

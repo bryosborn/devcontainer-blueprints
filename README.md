@@ -8,6 +8,7 @@ Planned shape:
 mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
   -> base-dod image with Docker-outside-of-Docker only
   -> base-vscode template image with a pinned VS Code Server payload
+  -> base-toolchain image with offline-installed cicd-common-style tools
 ```
 
 ## Concepts
@@ -196,6 +197,8 @@ The first toolchain modules are split by install shape:
 src/tool-artifacts/java-maven/
 src/tool-artifacts/node/
 src/tool-artifacts/cli-tools/
+src/tool-artifacts/mongodb/
+src/tool-artifacts/rust/
 ```
 
 Prefetch all current modules:
@@ -210,6 +213,8 @@ Or prefetch a single module:
 ./src/tool-artifacts/java-maven/scripts/prefetch.sh
 ./src/tool-artifacts/node/scripts/prefetch.sh
 ./src/tool-artifacts/cli-tools/scripts/prefetch.sh
+./src/tool-artifacts/mongodb/scripts/prefetch.sh
+./src/tool-artifacts/rust/scripts/prefetch.sh
 ```
 
 Artifacts are written under `artifacts/toolchain/` and ignored by git. Each module has an offline Docker build test that bind-mounts the artifact directory with BuildKit, so raw downloaded archives are available during installation without being copied into a permanent image layer.
@@ -226,6 +231,8 @@ Or test a single module:
 ./src/tool-artifacts/java-maven/scripts/test-install.sh
 ./src/tool-artifacts/node/scripts/test-install.sh
 ./src/tool-artifacts/cli-tools/scripts/test-install.sh
+./src/tool-artifacts/mongodb/scripts/test-install.sh
+./src/tool-artifacts/rust/scripts/test-install.sh
 ```
 
 ## Base Toolchain Image
@@ -238,6 +245,8 @@ BASE_VSCODE_IMAGE
   -> Java/Maven artifacts
   -> Node artifacts
   -> CLI tool artifacts
+  -> MongoDB client tool artifacts
+  -> Rust artifacts
   -> VS Code extension artifacts
 ```
 
@@ -255,7 +264,13 @@ Smoke test the composed image:
 ./src/base-toolchain/scripts/test-image.sh
 ```
 
-The smoke test verifies Java/Maven, Node/npm/npx, Helm, kubectl, ORAS, yq, VS Code Server, the installed VS Code extensions, Docker CLI-only behavior, and Python `3.12`/`3.13` plus `venv` availability. Global `pip` for Python `3.12`/`3.13` is not assumed by this layer.
+The smoke test verifies Java/Maven, Node/npm/npx, Helm, kubectl, ORAS, yq, mongosh, MongoDB Database Tools, Rust/rustup/cargo/rustfmt/clippy, VS Code Server, the installed VS Code extensions, Docker CLI-only behavior, and Python `3.12`/`3.13` plus `venv` and global `pip` entry points.
+
+Compare the composed image against the remaining `cicd-common` path and version expectations:
+
+```bash
+./src/base-toolchain/scripts/compare-cicd-common.sh
+```
 
 ## Static Checks
 
@@ -266,6 +281,7 @@ find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifact
 jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json src/base-toolchain/devcontainer-template.json src/base-toolchain/.devcontainer/devcontainer.json
 npm run test:vscode-extensions
 ./src/base-vscode/scripts/test-server-install.sh
+./src/base-toolchain/scripts/compare-cicd-common.sh
 find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
