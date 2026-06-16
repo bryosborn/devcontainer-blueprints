@@ -46,6 +46,7 @@ Default config:      docker.env
 - `docker.local.example.env`: Optional local-registry env example; copy to ignored `docker.local.env`.
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
+- `scripts/package-artifacts.sh`: Pulls/saves the configured DOD base image into `artifacts/docker-images/`, then creates a tar.gz bundle of the full `artifacts/` directory.
 - `scripts/test-base-dod.sh`: Smoke tests the DOD base image.
 - `src/base-vscode/`: Dev Container Template that extends `BASE_IMAGE` and bakes a selected VS Code Server commit into `/home/vscode/.vscode-server/bin`.
 - `src/base-vscode/scripts/`: VS Code Server artifact and `base-vscode` template build/test workflow.
@@ -128,6 +129,7 @@ Current online preparation:
 ./scripts/pull-upstream-base-image.sh
 ./scripts/build-base-dod.sh
 ./scripts/test-base-dod.sh
+./scripts/package-artifacts.sh
 ./src/base-vscode/scripts/prefetch-server.sh
 ./src/base-vscode/scripts/test-server-install.sh
 ./src/base-vscode/scripts/prefetch-extensions.sh
@@ -189,3 +191,4 @@ Current lessons:
 - 2026-06-16 - Decision: The composed image sets `JAVA_HOME=/opt/java`, fixes kubectl and yq symlinks to match the `cicd-common` install paths, and adds global pip wrappers for Python 3.12/3.13.
 - 2026-06-16 - Decision: MongoDB client parity is scoped to `mongosh` and MongoDB Database Tools only; MongoDB server packages are intentionally out of scope.
 - 2026-06-16 - Decision: Rust is prefetched by installing the pinned `nightly-2026-04-11` toolchain and required components into artifact-owned Rust/Cargo homes, then copied offline into `/usr/local/rustup` and `/usr/local/cargo`.
+- 2026-06-16 - Decision: `scripts/package-artifacts.sh` attempts to pull `BASE_IMAGE`, falls back to a local image tag for local-first workflows, saves it under `artifacts/docker-images/`, and writes the compressed `artifacts/` bundle outside the artifact root to avoid self-inclusion.

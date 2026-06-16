@@ -51,5 +51,11 @@ artifacts/toolchain/**/rustup-init
 artifacts/toolchain/**/rustup-home/
 artifacts/toolchain/**/cargo-home/
 
+# Packaged image/artifact bundles
+artifacts/docker-images/*.tar
+artifacts/docker-images/*.tar.sha256
+artifacts-*.tar.gz
+artifacts-*.tar.gz.sha256
+
 # Node dependencies for resolver tooling
 node_modules/

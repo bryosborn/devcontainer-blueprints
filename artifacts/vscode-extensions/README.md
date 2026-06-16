@@ -1,7 +1,17 @@
 # VS Code Extension Artifacts
 
-This directory stores downloaded VSIX files and generated lockfiles for offline VS Code extension installation.
+Generated VS Code extension artifacts live here.
 
-The online prefetch step downloads VSIX files from the Visual Studio Marketplace.
+Create or refresh them with:
 
-The offline Docker build installs only from files already present here.
+```bash
+./src/base-vscode/scripts/prefetch-extensions.sh
+```
+
+The offline install test is:
+
+```bash
+./src/base-vscode/scripts/test-extensions-install.sh
+```
+
+VSIX files and generated lockfiles are ignored by git.
