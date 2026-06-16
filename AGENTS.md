@@ -10,6 +10,7 @@ Build a boring, minimal skeleton that proves this planned flow:
 local template
   -> cicd-common-style upstream base image
   -> base-dod image with Docker-outside-of-Docker only
+  -> base-vscode image with a pinned VS Code Server payload
   -> usable scratch devcontainer
 ```
 
@@ -31,6 +32,8 @@ BASE_IMAGE_NAME:     base-dod
 BASE_IMAGE_VERSION:  0.1.0
 UPSTREAM_BASE_IMAGE: mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
 BASE_IMAGE:          devcontainers/base-dod:0.1.0
+BASE_VSCODE_IMAGE:   devcontainers/base-vscode:0.1.0
+BASE_VSCODE_VERSION: 1.124.2
 Default config:      docker.env
 ```
 
@@ -43,9 +46,28 @@ Default config:      docker.env
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
 - `scripts/test-base-dod.sh`: Smoke tests the DOD base image.
+- `src/base-vscode/`: Dev Container Template that extends `BASE_IMAGE` and bakes a selected VS Code Server commit into `/home/vscode/.vscode-server/bin`.
+- `src/base-vscode/scripts/`: VS Code Server artifact and `base-vscode` template build/test workflow.
+- `src/base-vscode/scripts/prefetch-server.sh`: Online step that resolves/downloads the configured VS Code Server archive into `artifacts/vscode-server/`.
+- `src/base-vscode/scripts/install-server.sh`: Offline install helper copied into Docker build contexts.
+- `src/base-vscode/scripts/build-template.sh`: Builds `BASE_VSCODE_IMAGE` from `src/base-vscode`.
+- `src/base-vscode/scripts/test-template.sh`: Smoke tests `BASE_VSCODE_IMAGE` with `--network=none`.
+- `src/base-vscode/scripts/test-server-install.sh`: Builds `test/Dockerfile.vscode-server` with `docker build --network=none`.
+- `src/base-vscode/scripts/prefetch-extensions.sh`: Online step that resolves/downloads VS Code extension VSIX artifacts into `artifacts/vscode-extensions/`.
+- `src/base-vscode/scripts/prefetch-extensions.mjs`: Marketplace resolver that checks VS Code version compatibility, target platform, dependencies, extension packs, extension kind, and hashes.
+- `src/base-vscode/scripts/install-extensions.sh`: Offline install helper that installs local VSIX files in lockfile order through the preinstalled VS Code Server CLI.
+- `src/base-vscode/scripts/test-extension-resolver.mjs`: Local resolver behavior tests for semver, extension kind, dependency/pack ordering, built-ins, and cycle detection.
+- `src/base-vscode/scripts/test-extensions-install.sh`: Builds `src/base-vscode/test/Dockerfile.extensions` with `docker build --network=none`.
+- `config/vscode-extensions.txt`: Initial VS Code extension source list adapted from `cicd-common/extensions.txt`.
+- `config/vscode-extensions.env`: Defaults for extension prefetch target platform, artifact root, server metadata, and remote user.
 - `scripts/lib/env.sh`: Shared env-file loading, required-variable checks, and image-ref helpers.
 - `scripts/start-local-registry.sh`: Optional helper for registry experiments.
 - `cicd-common/`: Ignored reference extraction from `cicd-common.zip`; do not edit or stage.
+- `src/apt-artifacts/`: APT package root list and scripts for prefetching `.deb` artifacts into a local file-backed apt repo, then testing offline install with `docker build --network=none`.
+- `config/toolchain.env`: Central version/hash knobs for modular toolchain artifact downloads.
+- `src/tool-artifacts/`: Modular toolchain artifact workflow. Current modules cover Java/Maven, Node, and CLI tools.
+- `src/tool-artifacts/scripts/prefetch-all.sh`: Online step that downloads all current toolchain module artifacts into `artifacts/toolchain/`.
+- `src/tool-artifacts/scripts/test-all.sh`: Runs each current toolchain module's offline install test.
 
 ## Design Rules
 
@@ -53,6 +75,17 @@ Default config:      docker.env
 - Do not add GitHub Actions, GHCR publishing, custom Dev Container Features, Docker-in-Docker, Compose services, language stacks, or enterprise registry plumbing yet.
 - The target base family should match the `cicd-common` reference: `mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04`.
 - `base-dod` is the built image containing only Docker-outside-of-Docker installed through the Dev Container Feature installer.
+- `base-vscode` is the first actual Dev Container Template boundary; it should reuse `BASE_IMAGE` and bake the configured VS Code Server commit.
+- `BASE_VSCODE_VERSION` is the normal user-facing selector. `BASE_VSCODE_COMMIT` is optional and should be left empty unless an exact VS Code client commit override is needed.
+- VS Code Server downloads happen only in `src/base-vscode/scripts/prefetch-server.sh`; the template Dockerfile and test Dockerfile should install from `artifacts/vscode-server/` and must not run `curl`.
+- Install both known VS Code Server layouts: `~/.vscode-server/cli/servers/Stable-<commit>/server` and `~/.vscode-server/bin/<commit>`, with the legacy `<commit>/0` marker.
+- VS Code extension downloads happen only in `src/base-vscode/scripts/prefetch-extensions.sh` / `.mjs`; Docker builds should install from local VSIX artifacts and lockfiles only.
+- VS Code extension lockfiles should record exact versions, target platform, SHA256, install order, extension kind classification, host-only extensions, built-in dependencies, and warnings.
+- UI-only VS Code extensions should not be installed in the container by default; record them as host-only in the lockfile.
+- The final smoke test should run with `--network=none`.
+- APT artifacts should be saved under `artifacts/apt/` as `.deb` files plus `Packages`, `Packages.gz`, `SHA256SUMS`, and metadata. The install path should use a local `file:` apt repo and be tested with `docker build --network=none`.
+- Toolchain versions should live in `config/toolchain.env`. Hashes are optional while exploring, but filled-in hash values are strict verification pins.
+- Toolchain modules should remain split by install shape under `src/tool-artifacts/`. Docker build tests should use BuildKit bind mounts for `artifacts/toolchain/` so raw downloaded archives do not become image layers.
 - The Docker-outside-of-Docker feature should use `moby=false`.
 - The final DOD image should include compose-switch pinned by `DOD_COMPOSE_SWITCH_VERSION`. The upstream Docker-outside-of-Docker feature installs compose-switch as `latest`, so keep `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false` and add the pinned switch in the build script's final image layer.
 - `docker.env` records the Docker runtime versions observed from the DOD feature when it installed latest packages: Docker CLI `29.5.3-1`, Compose `2.40.3`, and Buildx `0.34.1-1`. The feature supports the Docker CLI pin directly; exact Compose and Docker CE Buildx pins are reference values because the feature schema does not expose exact Docker CE package version options for them.
@@ -75,9 +108,11 @@ Static checks:
 
 ```bash
 jq empty .devcontainer/devcontainer.json .devcontainer/devcontainer-lock.json
-find scripts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
-shellcheck -x scripts/*.sh scripts/lib/*.sh
-find scripts -type f -name '*.sh' -printf '%m %p\n' | sort
+find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
+jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json
+npm run test:vscode-extensions
+find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
 Current online preparation:
@@ -86,6 +121,16 @@ Current online preparation:
 ./scripts/pull-upstream-base-image.sh
 ./scripts/build-base-dod.sh
 ./scripts/test-base-dod.sh
+./src/base-vscode/scripts/prefetch-server.sh
+./src/base-vscode/scripts/test-server-install.sh
+./src/base-vscode/scripts/prefetch-extensions.sh
+./src/base-vscode/scripts/test-extensions-install.sh
+./src/base-vscode/scripts/build-template.sh
+./src/base-vscode/scripts/test-template.sh
+./src/apt-artifacts/scripts/prefetch.sh
+./src/apt-artifacts/scripts/test-install.sh
+./src/tool-artifacts/scripts/prefetch-all.sh
+./src/tool-artifacts/scripts/test-all.sh
 ```
 
 ## Change Hygiene
@@ -108,7 +153,7 @@ YYYY-MM-DD - Caveat: ...
 
 Current lessons:
 
-- 2026-06-16 - Finding: `shellcheck` is available in the current bootstrap container, so the documented static checks include `shellcheck -x scripts/*.sh` alongside `bash -n`.
+- 2026-06-16 - Finding: `shellcheck` is available in the current bootstrap container, so the documented static checks include recursive `shellcheck -x` alongside `bash -n`.
 - 2026-06-16 - Decision: The default local workflow does not assume a registry on `localhost:5000`; local image tags live in the host Docker daemon, and registry configs are explicit opt-ins.
 - 2026-06-16 - Caveat: On the observed host path, port `5000` answered as Apple AirTunes/AirPlay rather than Docker Registry, so the optional local registry example uses port `5001`.
 - 2026-06-16 - Finding: The ignored `cicd-common/` reference uses `mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04` and a large hand-built toolchain image.
@@ -119,3 +164,13 @@ Current lessons:
 - 2026-06-16 - Decision: The canonical default env file is `docker.env` at the repo root; root-level `*.local.env` files are private overrides, and `docker.local.example.env` is the tracked local-registry example.
 - 2026-06-16 - Finding: The tested DOD base image reports Docker CLI `29.5.3`, Compose `2.40.3`, and Buildx `0.34.1`; `docker.env` records those observed runtime versions as `29.5.3-1`, `2.40.3`, and `0.34.1-1`.
 - 2026-06-16 - Decision: Pin compose-switch with `DOD_COMPOSE_SWITCH_VERSION=1.0.5`; the feature's unpinned compose-switch path stays disabled, and `scripts/build-base-dod.sh` adds the pinned switch in a final image layer.
+- 2026-06-16 - Decision: `src/base-vscode` is the first template boundary. It extends the built DOD base image and bakes a configured VS Code Server commit.
+- 2026-06-16 - Decision: VS Code Server artifacts are prefetched into `artifacts/vscode-server/`; Docker builds install them offline through `src/base-vscode/scripts/install-server.sh` instead of downloading from the Dockerfile.
+- 2026-06-16 - Decision: Keep VS Code Server/template workflow scripts under `src/base-vscode/scripts/` so top-level `scripts/` remains focused on base image and registry helpers.
+- 2026-06-16 - Decision: `BASE_VSCODE_VERSION` is the preferred selector for `base-vscode`; scripts resolve the prefetched commit from metadata, while `BASE_VSCODE_COMMIT` remains an optional exact override.
+- 2026-06-16 - Decision: APT artifact support lives under `src/apt-artifacts/`; it prefetches package roots into a local apt repo and tests install through `docker build --network=none`.
+- 2026-06-16 - Decision: VS Code extension artifact support lives under `src/base-vscode/scripts/`; it resolves Marketplace VSIX files against the prefetched VS Code Server product version and writes `artifacts/vscode-extensions/vscode-extensions.lock.json`.
+- 2026-06-16 - Finding: Some VS Code extension dependencies use `vscode.*` built-in extension IDs such as `vscode.docker` and `vscode.yaml`; these are recorded as built-in dependencies, not downloaded VSIX files.
+- 2026-06-16 - Finding: The current Python extension set contains a dependency cycle between `ms-python.python` and `ms-python.debugpy`; the resolver records a warning and uses deterministic resolution order for install.
+- 2026-06-16 - Decision: Remote development extension pack members classify as host-only and are locked but not installed into the container by default.
+- 2026-06-16 - Decision: Toolchain artifact support lives under `src/tool-artifacts/`, with easy version/hash knobs in `config/toolchain.env` and module install tests that bind-mount artifacts during Docker builds.

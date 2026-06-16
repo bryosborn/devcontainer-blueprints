@@ -1,0 +1,25 @@
+{
+  "name": "Base VS Code Server",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "BASE_IMAGE": "${templateOption:baseImage}",
+      "VSCODE_COMMIT": "${templateOption:vscodeCommit}",
+      "VSCODE_QUALITY": "${templateOption:vscodeQuality}",
+      "VSCODE_SERVER_PLATFORM": "server-linux-x64",
+      "VSCODE_REMOTE_USER": "vscode"
+    }
+  },
+
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": false
+      }
+    }
+  }
+}

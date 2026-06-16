@@ -1,0 +1,35 @@
+ARG BASE_IMAGE=mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ARG VSCODE_COMMIT
+ARG VSCODE_QUALITY=stable
+ARG VSCODE_SERVER_PLATFORM=server-linux-x64
+ARG VSCODE_EXTENSION_TARGET_PLATFORM=linux-x64
+ARG VSCODE_REMOTE_USER=vscode
+
+USER root
+
+COPY src/base-vscode/scripts/install-server.sh /usr/local/bin/install-vscode-server.sh
+COPY src/base-vscode/scripts/install-extensions.sh /usr/local/bin/install-vscode-extensions.sh
+
+COPY artifacts/vscode-server/ /opt/vscode-server-artifacts/
+COPY artifacts/vscode-extensions/ /opt/vscode-extension-artifacts/
+
+RUN chmod +x /usr/local/bin/install-vscode-server.sh /usr/local/bin/install-vscode-extensions.sh
+
+RUN test -n "${VSCODE_COMMIT}" \
+    && /usr/local/bin/install-vscode-server.sh \
+      --commit "${VSCODE_COMMIT}" \
+      --quality "${VSCODE_QUALITY}" \
+      --user "${VSCODE_REMOTE_USER}" \
+      --archive "/opt/vscode-server-artifacts/${VSCODE_QUALITY}/${VSCODE_COMMIT}/${VSCODE_SERVER_PLATFORM}/vscode-server-${VSCODE_SERVER_PLATFORM#server-}.tar.gz"
+
+RUN /usr/local/bin/install-vscode-extensions.sh \
+      --lock "/opt/vscode-extension-artifacts/vscode-extensions.lock.json" \
+      --user "${VSCODE_REMOTE_USER}" \
+      --commit "${VSCODE_COMMIT}" \
+    && rm -rf /opt/vscode-server-artifacts /opt/vscode-extension-artifacts
+
+USER vscode
+
+WORKDIR /workspaces

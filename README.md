@@ -7,6 +7,7 @@ Planned shape:
 ```text
 mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
   -> base-dod image with Docker-outside-of-Docker only
+  -> base-vscode template image with a pinned VS Code Server payload
 ```
 
 ## Concepts
@@ -29,6 +30,8 @@ BASE_IMAGE_NAME:     base-dod
 BASE_IMAGE_VERSION:  0.1.0
 UPSTREAM_BASE_IMAGE: mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
 BASE_IMAGE:          devcontainers/base-dod:0.1.0
+BASE_VSCODE_IMAGE:   devcontainers/base-vscode:0.1.0
+BASE_VSCODE_VERSION: 1.124.2
 ```
 
 `REGISTRY` is used as an image prefix. For local daemon-only builds it can be just a namespace like `devcontainers`; for a registry workflow it can include a host and path like `localhost:5001/devcontainers`.
@@ -104,13 +107,137 @@ Smoke test the DOD-only base image:
 ./scripts/test-base-dod.sh
 ```
 
+Prefetch the configured VS Code Server archive:
+
+```bash
+./src/base-vscode/scripts/prefetch-server.sh
+```
+
+The prefetch script writes artifacts under:
+
+```text
+artifacts/vscode-server/stable/<commit>/<server-platform>/
+```
+
+Build a base VS Code image from the template in `src/base-vscode`:
+
+```bash
+./src/base-vscode/scripts/build-template.sh
+```
+
+The template extends `BASE_IMAGE`, copies the prefetched artifact into the build context, and installs the configured VS Code Server archive into both known VS Code Server layouts:
+
+```text
+/home/vscode/.vscode-server/cli/servers/Stable-${BASE_VSCODE_COMMIT}/server
+/home/vscode/.vscode-server/bin/${BASE_VSCODE_COMMIT}
+```
+
+The default VS Code version comes from `docker.env`. To build for a different VS Code version, copy `docker.env` to a private ignored env file, set `BASE_VSCODE_VERSION`, prefetch that version, and run the build script with `DOCKER_ENV_FILE`. Set `BASE_VSCODE_COMMIT` only when you need an exact commit override.
+
+Prove the installer Dockerfile path without network access:
+
+```bash
+./src/base-vscode/scripts/test-server-install.sh
+```
+
+Smoke test the base VS Code image without network access:
+
+```bash
+./src/base-vscode/scripts/test-template.sh
+```
+
+## VS Code Extension Artifact Workflow
+
+`config/vscode-extensions.txt` captures the initial extension IDs adapted from `cicd-common/extensions.txt`. The prefetch script resolves compatible versions for the configured VS Code Server metadata, expands dependencies and extension packs, downloads VSIX artifacts, validates each VSIX, and writes a lockfile:
+
+```bash
+./src/base-vscode/scripts/prefetch-extensions.sh
+```
+
+The generated lockfile is written to:
+
+```text
+artifacts/vscode-extensions/vscode-extensions.lock.json
+```
+
+The lockfile records exact versions, target platform, SHA256 hashes, install order, host-only extensions, built-in VS Code dependencies, and warnings. VSIX files are ignored by git.
+
+Prove the VS Code Server plus extension install path without network access:
+
+```bash
+./src/base-vscode/scripts/test-extensions-install.sh
+```
+
+The test builds with `docker build --network=none`, installs the prefetched VS Code Server archive, installs only local VSIX files from the lockfile, and verifies the installed extension list with `code-server --list-extensions --show-versions`.
+
+## APT Artifact Workflow
+
+`src/apt-artifacts/apt-packages.txt` captures the APT package roots adapted from the `cicd-common` Dockerfile. The prefetch script resolves those package roots against the configured target image and writes a local file-backed apt repo under `artifacts/apt/`:
+
+```bash
+./src/apt-artifacts/scripts/prefetch.sh
+```
+
+The artifact repo contains `.deb` files plus `Packages`, `Packages.gz`, and checksums. The install helper then points apt at that local repo during a Docker build.
+
+Prove the install path without network access:
+
+```bash
+./src/apt-artifacts/scripts/test-install.sh
+```
+
+## Toolchain Artifact Workflow
+
+`config/toolchain.env` centralizes the versions adapted from the `cicd-common` toolchain Dockerfile. Hash fields are first-class but optional: leave a hash empty to download the artifact and record the observed hash in generated metadata, or fill it in to make prefetch fail on a mismatch.
+
+The first toolchain modules are split by install shape:
+
+```text
+src/tool-artifacts/java-maven/
+src/tool-artifacts/node/
+src/tool-artifacts/cli-tools/
+```
+
+Prefetch all current modules:
+
+```bash
+./src/tool-artifacts/scripts/prefetch-all.sh
+```
+
+Or prefetch a single module:
+
+```bash
+./src/tool-artifacts/java-maven/scripts/prefetch.sh
+./src/tool-artifacts/node/scripts/prefetch.sh
+./src/tool-artifacts/cli-tools/scripts/prefetch.sh
+```
+
+Artifacts are written under `artifacts/toolchain/` and ignored by git. Each module has an offline Docker build test that bind-mounts the artifact directory with BuildKit, so raw downloaded archives are available during installation without being copied into a permanent image layer.
+
+Run all current offline install tests:
+
+```bash
+./src/tool-artifacts/scripts/test-all.sh
+```
+
+Or test a single module:
+
+```bash
+./src/tool-artifacts/java-maven/scripts/test-install.sh
+./src/tool-artifacts/node/scripts/test-install.sh
+./src/tool-artifacts/cli-tools/scripts/test-install.sh
+```
+
 ## Static Checks
 
 ```bash
 jq empty .devcontainer/devcontainer.json .devcontainer/devcontainer-lock.json
-find scripts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
-shellcheck -x scripts/*.sh scripts/lib/*.sh
-find scripts -type f -name '*.sh' -printf '%m %p\n' | sort
+find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
+jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json
+npm run test:vscode-extensions
+./src/base-vscode/scripts/test-server-install.sh
+find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
 ## Optional Registry Workflow

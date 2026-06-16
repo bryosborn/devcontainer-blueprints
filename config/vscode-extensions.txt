@@ -1,0 +1,13 @@
+SonarSource.sonarlint-vscode
+rust-lang.rust-analyzer
+dbaeumer.vscode-eslint
+esbenp.prettier-vscode
+ms-azuretools.vscode-docker
+redhat.vscode-xml
+redhat.vscode-yaml
+ms-vscode.cpptools
+emeraldwalk.RunOnSave
+ms-python.python
+ms-toolsai.jupyter
+vscjava.vscode-java-pack
+ms-vscode-remote.vscode-remote-extensionpack

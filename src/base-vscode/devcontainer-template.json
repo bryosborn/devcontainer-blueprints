@@ -1,0 +1,28 @@
+{
+  "id": "base-vscode",
+  "version": "0.1.0",
+  "name": "Base VS Code Server",
+  "description": "Build a dev container from the local DOD base image with a pinned VS Code Server payload baked in.",
+  "documentationURL": "https://github.com/bryosborn/devcontainer-blueprints",
+  "options": {
+    "baseImage": {
+      "type": "string",
+      "default": "devcontainers/base-dod:0.1.0",
+      "description": "Base image to extend. Build scripts produce devcontainers/base-dod:0.1.0 by default."
+    },
+    "vscodeCommit": {
+      "type": "string",
+      "default": "6928394f91b684055b873eecb8bc281365131f1c",
+      "description": "VS Code commit ID whose server archive should be baked into the image."
+    },
+    "vscodeQuality": {
+      "type": "string",
+      "default": "stable",
+      "enum": [
+        "stable",
+        "insider"
+      ],
+      "description": "VS Code update channel used to fetch the server archive."
+    }
+  }
+}

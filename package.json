@@ -1,0 +1,13 @@
+{
+  "name": "devcontainer-blueprints-extension-prefetcher",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prefetch:vscode-extensions": "node src/base-vscode/scripts/prefetch-extensions.mjs",
+    "test:vscode-extensions": "node src/base-vscode/scripts/test-extension-resolver.mjs"
+  },
+  "dependencies": {
+    "semver": "^7.7.2"
+  },
+  "devDependencies": {}
+}

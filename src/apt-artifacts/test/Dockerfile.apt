@@ -1,0 +1,18 @@
+ARG BASE_IMAGE=mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+USER root
+
+COPY src/apt-artifacts/scripts/install.sh /usr/local/bin/install-apt-artifacts.sh
+COPY src/apt-artifacts/apt-packages.txt /opt/apt-packages.txt
+COPY artifacts/apt/ /opt/apt-artifacts/
+
+RUN chmod +x /usr/local/bin/install-apt-artifacts.sh \
+    && /usr/local/bin/install-apt-artifacts.sh \
+      --artifact-root /opt/apt-artifacts \
+      --packages-file /opt/apt-packages.txt \
+    && rm -rf /opt/apt-artifacts /opt/apt-packages.txt /usr/local/bin/install-apt-artifacts.sh
+
+USER vscode
+
+WORKDIR /workspaces
