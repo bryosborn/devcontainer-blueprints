@@ -1,0 +1,13 @@
+bash-completion
+ca-certificates
+curl
+git
+jq
+less
+nano
+openssh-client
+procps
+unzip
+vim-tiny
+wget
+zip

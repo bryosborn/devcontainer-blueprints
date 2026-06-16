@@ -1,0 +1,13 @@
+{
+  "id": "simple-dev",
+  "version": "0.1.0",
+  "name": "Simple Dev",
+  "description": "A minimal local dev container template using a configurable local base image.",
+  "options": {
+    "baseImage": {
+      "type": "string",
+      "default": "localhost:5000/devcontainers/dev-base:0.1.0",
+      "description": "Base image to build from."
+    }
+  }
+}
