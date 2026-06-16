@@ -1,0 +1,13 @@
+{
+  "id": "base-toolchain",
+  "version": "0.1.0",
+  "name": "Base Toolchain",
+  "description": "Extends base-vscode with offline-installed APT packages, language toolchains, CLI tools, and VS Code extensions.",
+  "options": {
+    "baseImage": {
+      "type": "string",
+      "default": "devcontainers/base-vscode:0.1.0",
+      "description": "Base image containing Docker-outside-of-Docker and the selected VS Code Server."
+    }
+  }
+}

@@ -228,16 +228,45 @@ Or test a single module:
 ./src/tool-artifacts/cli-tools/scripts/test-install.sh
 ```
 
+## Base Toolchain Image
+
+`src/base-toolchain` composes the current prepared pieces into one image:
+
+```text
+BASE_VSCODE_IMAGE
+  -> APT artifacts
+  -> Java/Maven artifacts
+  -> Node artifacts
+  -> CLI tool artifacts
+  -> VS Code extension artifacts
+```
+
+Build it after the artifact prefetch steps have completed:
+
+```bash
+./src/base-toolchain/scripts/build-image.sh
+```
+
+The build uses `docker build --network=none` and named BuildKit contexts for `artifacts/apt`, `artifacts/toolchain`, and `artifacts/vscode-extensions`. Those artifact directories are mounted only during install steps; the raw archives are not copied into permanent image layers.
+
+Smoke test the composed image:
+
+```bash
+./src/base-toolchain/scripts/test-image.sh
+```
+
+The smoke test verifies Java/Maven, Node/npm/npx, Helm, kubectl, ORAS, yq, VS Code Server, the installed VS Code extensions, Docker CLI-only behavior, and Python `3.12`/`3.13` plus `venv` availability. Global `pip` for Python `3.12`/`3.13` is not assumed by this layer.
+
 ## Static Checks
 
 ```bash
 jq empty .devcontainer/devcontainer.json .devcontainer/devcontainer-lock.json
-find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
-find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
-jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
+jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json src/base-toolchain/devcontainer-template.json src/base-toolchain/.devcontainer/devcontainer.json
 npm run test:vscode-extensions
 ./src/base-vscode/scripts/test-server-install.sh
-find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
 ## Optional Registry Workflow

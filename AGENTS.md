@@ -33,6 +33,7 @@ BASE_IMAGE_VERSION:  0.1.0
 UPSTREAM_BASE_IMAGE: mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
 BASE_IMAGE:          devcontainers/base-dod:0.1.0
 BASE_VSCODE_IMAGE:   devcontainers/base-vscode:0.1.0
+BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
 BASE_VSCODE_VERSION: 1.124.2
 Default config:      docker.env
 ```
@@ -68,6 +69,9 @@ Default config:      docker.env
 - `src/tool-artifacts/`: Modular toolchain artifact workflow. Current modules cover Java/Maven, Node, and CLI tools.
 - `src/tool-artifacts/scripts/prefetch-all.sh`: Online step that downloads all current toolchain module artifacts into `artifacts/toolchain/`.
 - `src/tool-artifacts/scripts/test-all.sh`: Runs each current toolchain module's offline install test.
+- `src/base-toolchain/`: Composed image layer extending `BASE_VSCODE_IMAGE` with APT, toolchain, and VS Code extension artifacts installed offline.
+- `src/base-toolchain/scripts/build-image.sh`: Builds `BASE_TOOLCHAIN_IMAGE` with `docker build --network=none` and named BuildKit artifact contexts.
+- `src/base-toolchain/scripts/test-image.sh`: Smoke tests the composed image, including Python 3.12/3.13, Java/Maven, Node, CLI tools, VS Code Server/extensions, and DOD CLI-only behavior.
 
 ## Design Rules
 
@@ -86,6 +90,8 @@ Default config:      docker.env
 - APT artifacts should be saved under `artifacts/apt/` as `.deb` files plus `Packages`, `Packages.gz`, `SHA256SUMS`, and metadata. The install path should use a local `file:` apt repo and be tested with `docker build --network=none`.
 - Toolchain versions should live in `config/toolchain.env`. Hashes are optional while exploring, but filled-in hash values are strict verification pins.
 - Toolchain modules should remain split by install shape under `src/tool-artifacts/`. Docker build tests should use BuildKit bind mounts for `artifacts/toolchain/` so raw downloaded archives do not become image layers.
+- `base-toolchain` composes existing artifact workflows; keep source install helpers modular and bring artifacts in with named BuildKit contexts instead of copying raw caches into the build workspace.
+- Python 3.12/3.13 come from the APT artifact layer as `python3.12-full` and `python3.13-full`. The composed image tests interpreter and `venv` availability, but global `pip` for those versions is not assumed.
 - The Docker-outside-of-Docker feature should use `moby=false`.
 - The final DOD image should include compose-switch pinned by `DOD_COMPOSE_SWITCH_VERSION`. The upstream Docker-outside-of-Docker feature installs compose-switch as `latest`, so keep `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false` and add the pinned switch in the build script's final image layer.
 - `docker.env` records the Docker runtime versions observed from the DOD feature when it installed latest packages: Docker CLI `29.5.3-1`, Compose `2.40.3`, and Buildx `0.34.1-1`. The feature supports the Docker CLI pin directly; exact Compose and Docker CE Buildx pins are reference values because the feature schema does not expose exact Docker CE package version options for them.
@@ -108,11 +114,11 @@ Static checks:
 
 ```bash
 jq empty .devcontainer/devcontainer.json .devcontainer/devcontainer-lock.json
-find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
-find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
-jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
+jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json src/base-toolchain/devcontainer-template.json src/base-toolchain/.devcontainer/devcontainer.json
 npm run test:vscode-extensions
-find scripts src/base-vscode/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
 Current online preparation:
@@ -131,6 +137,8 @@ Current online preparation:
 ./src/apt-artifacts/scripts/test-install.sh
 ./src/tool-artifacts/scripts/prefetch-all.sh
 ./src/tool-artifacts/scripts/test-all.sh
+./src/base-toolchain/scripts/build-image.sh
+./src/base-toolchain/scripts/test-image.sh
 ```
 
 ## Change Hygiene
@@ -174,3 +182,5 @@ Current lessons:
 - 2026-06-16 - Finding: The current Python extension set contains a dependency cycle between `ms-python.python` and `ms-python.debugpy`; the resolver records a warning and uses deterministic resolution order for install.
 - 2026-06-16 - Decision: Remote development extension pack members classify as host-only and are locked but not installed into the container by default.
 - 2026-06-16 - Decision: Toolchain artifact support lives under `src/tool-artifacts/`, with easy version/hash knobs in `config/toolchain.env` and module install tests that bind-mount artifacts during Docker builds.
+- 2026-06-16 - Decision: `src/base-toolchain` composes the existing offline artifact workflows into `BASE_TOOLCHAIN_IMAGE` using named BuildKit contexts and `docker build --network=none`.
+- 2026-06-16 - Finding: Python 3.12/3.13 are available from the APT artifact layer with `venv`; global `pip` for those interpreters is not present unless added intentionally later.

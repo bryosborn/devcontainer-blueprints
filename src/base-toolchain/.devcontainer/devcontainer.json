@@ -1,0 +1,22 @@
+{
+  "name": "Base Toolchain",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "BASE_IMAGE": "${templateOption:baseImage}",
+      "VSCODE_REMOTE_USER": "vscode"
+    }
+  },
+
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": false
+      }
+    }
+  }
+}
