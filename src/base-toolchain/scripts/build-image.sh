@@ -60,7 +60,7 @@ if [[ ! -f "${APT_PACKAGES}" ]]; then
   exit 1
 fi
 
-for module in java-maven node cli-tools; do
+for module in java-maven node cli-tools mongodb; do
   if [[ ! -d "${TOOLCHAIN_ROOT}/${module}" ]]; then
     echo "ERROR: Toolchain module artifacts are not available:"
     echo "  ${TOOLCHAIN_ROOT}/${module}"
@@ -86,6 +86,7 @@ cp "${REPO_ROOT}/src/base-toolchain/scripts/install-python-pip.sh" "${WORKSPACE}
 cp "${REPO_ROOT}/src/tool-artifacts/java-maven/scripts/install.sh" "${WORKSPACE}/scripts/install-java-maven.sh"
 cp "${REPO_ROOT}/src/tool-artifacts/node/scripts/install.sh" "${WORKSPACE}/scripts/install-node.sh"
 cp "${REPO_ROOT}/src/tool-artifacts/cli-tools/scripts/install.sh" "${WORKSPACE}/scripts/install-cli-tools.sh"
+cp "${REPO_ROOT}/src/tool-artifacts/mongodb/scripts/install.sh" "${WORKSPACE}/scripts/install-mongodb-tools.sh"
 cp "${REPO_ROOT}/src/base-vscode/scripts/install-extensions.sh" "${WORKSPACE}/scripts/install-vscode-extensions.sh"
 
 echo "Using config:"

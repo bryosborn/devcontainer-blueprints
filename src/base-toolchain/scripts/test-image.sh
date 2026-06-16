@@ -75,6 +75,15 @@ run_image "${BASE_TOOLCHAIN_IMAGE}" helm version
 run_image "${BASE_TOOLCHAIN_IMAGE}" kubectl version --client
 run_image "${BASE_TOOLCHAIN_IMAGE}" oras version
 run_image "${BASE_TOOLCHAIN_IMAGE}" yq --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongosh --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongodump --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongorestore --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongoimport --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongoexport --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" bsondump --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongostat --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongotop --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mongofiles --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3 --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 -m pip --version

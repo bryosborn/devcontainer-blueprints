@@ -24,6 +24,8 @@ RUN --mount=type=bind,from=apt_artifacts,source=.,target=/opt/apt-artifacts,read
       --artifact-root /opt/toolchain-artifacts/node \
     && /usr/local/share/base-toolchain/scripts/install-cli-tools.sh \
       --artifact-root /opt/toolchain-artifacts/cli-tools \
+    && /usr/local/share/base-toolchain/scripts/install-mongodb-tools.sh \
+      --artifact-root /opt/toolchain-artifacts/mongodb \
     && /usr/local/share/base-toolchain/scripts/install-vscode-extensions.sh \
       --lock /opt/vscode-extensions/vscode-extensions.lock.json \
       --user "${VSCODE_REMOTE_USER}" \
