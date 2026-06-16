@@ -47,6 +47,9 @@ artifacts/toolchain/**/CHECKSUMS
 artifacts/toolchain/**/SHA256SUMS
 artifacts/toolchain/**/SHA512SUMS
 artifacts/toolchain/**/metadata.json
+artifacts/toolchain/**/rustup-init
+artifacts/toolchain/**/rustup-home/
+artifacts/toolchain/**/cargo-home/
 
 # Node dependencies for resolver tooling
 node_modules/

@@ -42,6 +42,12 @@ docker run --rm \
     test -n "${code_server}"
     test -d "${extensions_dir}"
     test "${JAVA_HOME}" = "/opt/java"
+    test "${RUSTUP_HOME}" = "/usr/local/rustup"
+    test "${CARGO_HOME}" = "/usr/local/cargo"
+    case ":${PATH}:" in
+      *:/usr/local/cargo/bin:*) ;;
+      *) echo "ERROR: /usr/local/cargo/bin missing from PATH" >&2; exit 1 ;;
+    esac
     test "$(readlink /usr/bin/kubectl)" = "/opt/kubectl/client/bin/kubectl"
     test "$(readlink /usr/bin/yq)" = "/opt/yq/yq_linux_amd64"
     test -x /opt/kubectl/client/bin/kubectl
@@ -84,6 +90,12 @@ run_image "${BASE_TOOLCHAIN_IMAGE}" bsondump --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" mongostat --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" mongotop --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" mongofiles --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" rustup --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" rustc --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" cargo --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" rustfmt --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" cargo clippy --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" rustup component list --installed
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3 --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 -m pip --version

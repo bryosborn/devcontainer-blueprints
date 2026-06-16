@@ -4,6 +4,9 @@ FROM ${BASE_IMAGE}
 
 ARG VSCODE_REMOTE_USER=vscode
 ENV JAVA_HOME=/opt/java
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="/usr/local/cargo/bin:${PATH}"
 
 USER root
 
@@ -26,6 +29,8 @@ RUN --mount=type=bind,from=apt_artifacts,source=.,target=/opt/apt-artifacts,read
       --artifact-root /opt/toolchain-artifacts/cli-tools \
     && /usr/local/share/base-toolchain/scripts/install-mongodb-tools.sh \
       --artifact-root /opt/toolchain-artifacts/mongodb \
+    && /usr/local/share/base-toolchain/scripts/install-rust.sh \
+      --artifact-root /opt/toolchain-artifacts/rust \
     && /usr/local/share/base-toolchain/scripts/install-vscode-extensions.sh \
       --lock /opt/vscode-extensions/vscode-extensions.lock.json \
       --user "${VSCODE_REMOTE_USER}" \
