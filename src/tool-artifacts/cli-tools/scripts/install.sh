@@ -85,9 +85,9 @@ oras_archive="$(find_single_artifact oras 'oras_*_linux_*.tar.gz')"
 yq_archive="$(find_single_artifact yq 'yq_linux_*.tar.gz')"
 
 install_tar_member "helm" "${helm_archive}" 1 "helm" "/usr/bin/helm"
-install_tar_member "kubectl" "${kubectl_archive}" 0 "$(find_tar_member_named "${kubectl_archive}" kubectl)" "/usr/bin/kubectl"
+install_tar_member "kubectl" "${kubectl_archive}" 1 "client/bin/kubectl" "/usr/bin/kubectl"
 install_tar_member "oras" "${oras_archive}" 0 "$(find_tar_member_named "${oras_archive}" oras)" "/usr/bin/oras"
-install_tar_member "yq" "${yq_archive}" 0 "$(tar -tzf "${yq_archive}" | awk -F/ '/(^|\/)yq_linux_/ {print; exit}')" "/usr/bin/yq"
+install_tar_member "yq" "${yq_archive}" 0 "$(tar -tzf "${yq_archive}" | awk -F/ '/(^|\/)yq_linux_/ {gsub(/^\.\//, "", $0); print; exit}')" "/usr/bin/yq"
 
 helm version
 kubectl version --client

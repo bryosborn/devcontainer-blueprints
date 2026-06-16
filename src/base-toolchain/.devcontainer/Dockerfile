@@ -3,6 +3,7 @@ ARG BASE_IMAGE=devcontainers/base-vscode:0.1.0
 FROM ${BASE_IMAGE}
 
 ARG VSCODE_REMOTE_USER=vscode
+ENV JAVA_HOME=/opt/java
 
 USER root
 
@@ -16,6 +17,7 @@ RUN --mount=type=bind,from=apt_artifacts,source=.,target=/opt/apt-artifacts,read
     && /usr/local/share/base-toolchain/scripts/install-apt-artifacts.sh \
       --artifact-root /opt/apt-artifacts \
       --packages-file /usr/local/share/base-toolchain/apt-packages.txt \
+    && /usr/local/share/base-toolchain/scripts/install-python-pip.sh \
     && /usr/local/share/base-toolchain/scripts/install-java-maven.sh \
       --artifact-root /opt/toolchain-artifacts/java-maven \
     && /usr/local/share/base-toolchain/scripts/install-node.sh \

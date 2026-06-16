@@ -20,6 +20,13 @@ fi
 echo "Testing base toolchain image:"
 echo "  ${BASE_TOOLCHAIN_IMAGE}"
 
+run_image() {
+  docker run --rm \
+    --network=none \
+    --user root \
+    "$@"
+}
+
 docker run --rm \
   --network=none \
   --user root \
@@ -34,19 +41,11 @@ docker run --rm \
 
     test -n "${code_server}"
     test -d "${extensions_dir}"
-
-    java --version
-    javac --version
-    mvn --version
-
-    node --version
-    npm --version
-    npx --version
-
-    helm version
-    kubectl version --client
-    oras version
-    yq --version
+    test "${JAVA_HOME}" = "/opt/java"
+    test "$(readlink /usr/bin/kubectl)" = "/opt/kubectl/client/bin/kubectl"
+    test "$(readlink /usr/bin/yq)" = "/opt/yq/yq_linux_amd64"
+    test -x /opt/kubectl/client/bin/kubectl
+    test -x /opt/yq/yq_linux_amd64
 
     "${code_server}" --version
     "${code_server}" \
@@ -66,46 +65,26 @@ docker run --rm \
     fi
   '
 
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  python3 --version
-
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  python3.12 --version
-
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  python3.13 --version
-
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  python3.12 -m venv --help >/dev/null
-
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  python3.13 -m venv --help >/dev/null
-
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  bash -lc 'set -euo pipefail; python3.12 -m venv /tmp/py312'
-
-docker run --rm \
-  --network=none \
-  --user root \
-  "${BASE_TOOLCHAIN_IMAGE}" \
-  bash -lc 'set -euo pipefail; python3.13 -m venv /tmp/py313'
+run_image "${BASE_TOOLCHAIN_IMAGE}" java --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" javac --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" mvn --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" node --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" npm --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" npx --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" helm version
+run_image "${BASE_TOOLCHAIN_IMAGE}" kubectl version --client
+run_image "${BASE_TOOLCHAIN_IMAGE}" oras version
+run_image "${BASE_TOOLCHAIN_IMAGE}" yq --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3 --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 -m pip --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" pip3.12 --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3.13 --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3.13 -m pip --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" pip3.13 --version
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 -m venv --help >/dev/null
+run_image "${BASE_TOOLCHAIN_IMAGE}" python3.13 -m venv --help >/dev/null
+run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc 'set -euo pipefail; python3.12 -m venv /tmp/py312'
+run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc 'set -euo pipefail; python3.13 -m venv /tmp/py313'
 
 echo "Base toolchain image test completed successfully."
