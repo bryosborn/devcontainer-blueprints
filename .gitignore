@@ -13,47 +13,10 @@ cicd-common.zip
 *.local.env
 !*.local.example.env
 
-# VS Code Server downloaded artifacts
-artifacts/vscode-server/**/*.tar.gz
-artifacts/vscode-server/**/*.zip
-artifacts/vscode-server/**/SHA256SUMS
-artifacts/vscode-server/**/metadata.json
-artifacts/vscode-server/current-*.json
+# Downloaded artifacts
+artifacts/
 
-# APT downloaded artifacts
-artifacts/apt/debs/*.deb
-artifacts/apt/Packages
-artifacts/apt/Packages.gz
-artifacts/apt/SHA256SUMS
-artifacts/apt/metadata.json
-
-# VS Code extension artifacts
-artifacts/vscode-extensions/**/*.vsix
-artifacts/vscode-extensions/**/*.zip
-artifacts/vscode-extensions/**/*.tmp
-artifacts/vscode-extensions/**/*.sha256
-artifacts/vscode-extensions/**/package.json
-artifacts/vscode-extensions/**/metadata.json
-artifacts/vscode-extensions/**/SHA256SUMS
-artifacts/vscode-extensions/current-*.json
-artifacts/vscode-extensions/vscode-extensions.lock.json
-
-# Toolchain downloaded artifacts
-artifacts/toolchain/**/*.tar.gz
-artifacts/toolchain/**/*.tgz
-artifacts/toolchain/**/*.zip
-artifacts/toolchain/**/*.tmp
-artifacts/toolchain/**/CHECKSUMS
-artifacts/toolchain/**/SHA256SUMS
-artifacts/toolchain/**/SHA512SUMS
-artifacts/toolchain/**/metadata.json
-artifacts/toolchain/**/rustup-init
-artifacts/toolchain/**/rustup-home/
-artifacts/toolchain/**/cargo-home/
-
-# Packaged image/artifact bundles
-artifacts/docker-images/*.tar
-artifacts/docker-images/*.tar.sha256
+# Packaged artifact bundles
 artifacts-*.tar.gz
 artifacts-*.tar.gz.sha256
 
