@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 ARG BASE_IMAGE=devcontainers/base-vscode:0.1.0
 FROM ${BASE_IMAGE}
 

@@ -44,9 +44,13 @@ Default config:      docker.env
 - `.devcontainer/`: Bootstrap development container for working on this repo.
 - `docker.env`: Default host Docker daemon image coordinates.
 - `docker.local.example.env`: Optional local-registry env example; copy to ignored `docker.local.env`.
+- `scripts/prefetch-all.sh`: Connected-machine wrapper for all artifact prefetch steps.
+- `scripts/build-all.sh`: Connected-machine wrapper for the DOD, VS Code, and toolchain image builds.
+- `scripts/test-all.sh`: Wrapper for the current smoke/offline test suite.
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
-- `scripts/package-artifacts.sh`: Pulls/saves the configured DOD base image into `artifacts/docker-images/`, then creates a tar.gz bundle of the full `artifacts/` directory.
+- `scripts/package-artifacts.sh`: Saves configured `ARTIFACT_IMAGE_REFS` into `artifacts/docker-images/`, writes `artifacts/manifest.json`, then creates a tar.gz bundle of the full `artifacts/` directory.
+- `scripts/load-artifacts.sh`: Disconnected-machine helper that verifies and `docker load`s bundled image tar files.
 - `scripts/test-base-dod.sh`: Smoke tests the DOD base image.
 - `src/base-vscode/`: Dev Container Template that extends `BASE_IMAGE` and bakes a selected VS Code Server commit into `/home/vscode/.vscode-server/bin`.
 - `src/base-vscode/scripts/`: VS Code Server artifact and `base-vscode` template build/test workflow.
@@ -93,6 +97,7 @@ Default config:      docker.env
 - Toolchain versions should live in `config/toolchain.env`. Hashes are optional while exploring, but filled-in hash values are strict verification pins.
 - Toolchain modules should remain split by install shape under `src/tool-artifacts/`. Docker build tests should use BuildKit bind mounts for `artifacts/toolchain/` so raw downloaded archives do not become image layers.
 - `base-toolchain` composes existing artifact workflows; keep source install helpers modular and bring artifacts in with named BuildKit contexts instead of copying raw caches into the build workspace.
+- Dockerfiles should use the built-in BuildKit Dockerfile frontend unless there is a specific need for an external syntax image. Adding `# syntax=docker/dockerfile:...` makes disconnected builds resolve that image before any `--network=none` build step starts, so package/load that frontend image if one is ever reintroduced.
 - Python 3.12/3.13 come from the APT artifact layer as `python3.12-full` and `python3.13-full`. The composed image unpacks bundled pip wheels into global dist-packages and exposes `python3.12 -m pip`, `python3.13 -m pip`, `pip3.12`, and `pip3.13`.
 - The Docker-outside-of-Docker feature should use `moby=false`.
 - The final DOD image should include compose-switch pinned by `DOD_COMPOSE_SWITCH_VERSION`. The upstream Docker-outside-of-Docker feature installs compose-switch as `latest`, so keep `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false` and add the pinned switch in the build script's final image layer.
@@ -126,23 +131,20 @@ find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifact
 Current online preparation:
 
 ```bash
-./scripts/pull-upstream-base-image.sh
-./scripts/build-base-dod.sh
-./scripts/test-base-dod.sh
+./scripts/prefetch-all.sh
+./scripts/build-all.sh
+./scripts/test-all.sh
 ./scripts/package-artifacts.sh
-./src/base-vscode/scripts/prefetch-server.sh
-./src/base-vscode/scripts/test-server-install.sh
-./src/base-vscode/scripts/prefetch-extensions.sh
-./src/base-vscode/scripts/test-extensions-install.sh
-./src/base-vscode/scripts/build-template.sh
-./src/base-vscode/scripts/test-template.sh
-./src/apt-artifacts/scripts/prefetch.sh
-./src/apt-artifacts/scripts/test-install.sh
-./src/tool-artifacts/scripts/prefetch-all.sh
-./src/tool-artifacts/scripts/test-all.sh
+```
+
+Disconnected restore/build:
+
+```bash
+sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
+tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
+./scripts/load-artifacts.sh
 ./src/base-toolchain/scripts/build-image.sh
 ./src/base-toolchain/scripts/test-image.sh
-./src/base-toolchain/scripts/compare-cicd-common.sh
 ```
 
 ## Change Hygiene
@@ -191,4 +193,7 @@ Current lessons:
 - 2026-06-16 - Decision: The composed image sets `JAVA_HOME=/opt/java`, fixes kubectl and yq symlinks to match the `cicd-common` install paths, and adds global pip wrappers for Python 3.12/3.13.
 - 2026-06-16 - Decision: MongoDB client parity is scoped to `mongosh` and MongoDB Database Tools only; MongoDB server packages are intentionally out of scope.
 - 2026-06-16 - Decision: Rust is prefetched by installing the pinned `nightly-2026-04-11` toolchain and required components into artifact-owned Rust/Cargo homes, then copied offline into `/usr/local/rustup` and `/usr/local/cargo`.
-- 2026-06-16 - Decision: `scripts/package-artifacts.sh` attempts to pull `BASE_IMAGE`, falls back to a local image tag for local-first workflows, saves it under `artifacts/docker-images/`, and writes the compressed `artifacts/` bundle outside the artifact root to avoid self-inclusion.
+- 2026-06-16 - Decision: `scripts/package-artifacts.sh` writes the compressed `artifacts/` bundle outside the artifact root to avoid self-inclusion.
+- 2026-06-17 - Finding: `# syntax=docker/dockerfile:1.7` makes BuildKit resolve `docker/dockerfile:1.7` before the build starts, so disconnected builds can fail before any `--network=none` step runs.
+- 2026-06-17 - Decision: The current Dockerfiles use the built-in BuildKit frontend, which supports the named bind mounts used here and avoids the external frontend image lookup.
+- 2026-06-17 - Decision: `scripts/package-artifacts.sh` now saves all configured `ARTIFACT_IMAGE_REFS`, writes portable SHA256 files and `artifacts/manifest.json`, and `scripts/load-artifacts.sh` verifies/loads those images on the disconnected machine.

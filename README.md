@@ -25,42 +25,34 @@ Install the Dev Container CLI if needed:
 npm install -g @devcontainers/cli
 ```
 
-Build and test the DOD base first:
+Prepare, build, test, and package everything from a connected machine:
 
 ```bash
-./scripts/pull-upstream-base-image.sh
-./scripts/build-base-dod.sh
-./scripts/test-base-dod.sh
+./scripts/prefetch-all.sh
+./scripts/build-all.sh
+./scripts/test-all.sh
+./scripts/package-artifacts.sh
 ```
 
-Continue to the full VS Code and toolchain image:
+Move the generated `artifacts-*.tar.gz` and matching `.sha256` file to the disconnected machine, then run:
 
 ```bash
-./src/base-vscode/scripts/prefetch-server.sh
-./src/base-vscode/scripts/build-template.sh
-./src/base-vscode/scripts/test-template.sh
-
-./src/base-vscode/scripts/prefetch-extensions.sh
-./src/base-vscode/scripts/test-extensions-install.sh
-
-./src/apt-artifacts/scripts/prefetch.sh
-./src/apt-artifacts/scripts/test-install.sh
-
-./src/tool-artifacts/scripts/prefetch-all.sh
-./src/tool-artifacts/scripts/test-all.sh
-
+sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
+tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
+./scripts/load-artifacts.sh
 ./src/base-toolchain/scripts/build-image.sh
 ./src/base-toolchain/scripts/test-image.sh
-./src/base-toolchain/scripts/compare-cicd-common.sh
 ```
 
-Package the prepared `artifacts/` directory for transfer:
+The module-level scripts are still available when you want to work on one layer at a time.
+
+Package only the current artifact directory and configured image refs:
 
 ```bash
 ./scripts/package-artifacts.sh
 ```
 
-That script saves the configured `BASE_IMAGE` to `artifacts/docker-images/`, writes SHA256 files, and creates `artifacts-<base-image-name>-<version>.tar.gz` at the repo root. With the default local-only image tag, it tries `docker pull` first and then falls back to the locally built image.
+That script saves `ARTIFACT_IMAGE_REFS` to `artifacts/docker-images/`, writes portable SHA256 files and `artifacts/manifest.json`, and creates `artifacts-<toolchain-name>-<version>.tar.gz` at the repo root.
 
 ## Default Images
 
@@ -72,6 +64,7 @@ BASE_IMAGE:           devcontainers/base-dod:0.1.0
 BASE_VSCODE_IMAGE:    devcontainers/base-vscode:0.1.0
 BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
 BASE_VSCODE_VERSION:  1.124.2
+ARTIFACT_IMAGE_REFS:  devcontainers/base-dod:0.1.0 devcontainers/base-vscode:0.1.0
 ```
 
 Scripts load `docker.env` by default. To use a private override, set `DOCKER_ENV_FILE`; relative paths are resolved from the repo root.
@@ -187,6 +180,8 @@ artifacts/vscode-extensions
 ```
 
 Those directories are mounted during install steps. Raw downloaded archives are not copied into permanent image layers.
+
+Dockerfiles intentionally use the built-in BuildKit Dockerfile frontend. Avoid adding `# syntax=docker/dockerfile:...` unless the matching frontend image is also packaged and loaded, because BuildKit resolves that image before the disconnected build starts.
 
 ## Static Checks
 
