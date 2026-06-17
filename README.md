@@ -1,6 +1,6 @@
 # Dev Container Blueprints
 
-Local-first Dev Container image and artifact workflows for rebuilding a smaller `cicd-common`-style development environment.
+Local-first Dev Container image and artifact workflows for rebuilding a reproducible development environment.
 
 The current stack is:
 
@@ -25,7 +25,9 @@ Install the Dev Container CLI if needed:
 npm install -g @devcontainers/cli
 ```
 
-Prepare, build, test, and package everything from a connected machine:
+### 1. Online Machine: Download, Build, Test, Package
+
+Run this on the machine that has internet access. It downloads all external artifacts, builds the local images, runs the smoke tests, and packages the artifact directory plus Docker image tars.
 
 ```bash
 ./scripts/prefetch-all.sh
@@ -34,7 +36,16 @@ Prepare, build, test, and package everything from a connected machine:
 ./scripts/package-artifacts.sh
 ```
 
-Move the generated `artifacts-*.tar.gz` and matching `.sha256` file to the disconnected machine, then run:
+The package step creates:
+
+```text
+artifacts-base-toolchain-0.1.0.tar.gz
+artifacts-base-toolchain-0.1.0.tar.gz.sha256
+```
+
+### 2. Offline Build Test
+
+Before moving into the fully disconnected workflow, test the packaged restore path on a machine or environment with Docker available and network access disabled for the image build/test steps. Copy the generated `.tar.gz` and `.sha256` files there, then run:
 
 ```bash
 sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
@@ -44,9 +55,33 @@ tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
 ./src/base-toolchain/scripts/test-image.sh
 ```
 
-The module-level scripts are still available when you want to work on one layer at a time.
+`build-image.sh` and `test-image.sh` run Docker builds/tests with `--network=none`, so this verifies that the packaged artifacts are enough to recreate and smoke-test `base-toolchain` without downloading anything during the build.
 
-Package only the current artifact directory and configured image refs:
+### 3. Disconnected Environment
+
+Move the repo plus `artifacts-base-toolchain-0.1.0.tar.gz` and its `.sha256` file to the disconnected environment, then use the same restore commands:
+
+```bash
+sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
+tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
+./scripts/load-artifacts.sh
+./src/base-toolchain/scripts/build-image.sh
+./src/base-toolchain/scripts/test-image.sh
+```
+
+For a disconnected Windows + WSL + VS Code setup, also run the WSL setup script from Windows PowerShell after unpacking the repo and artifacts:
+
+```powershell
+.\scripts\setup-wsl-artifacts.ps1 -Distro Ubuntu -WslRepoPath /home/me/devcontainer-blueprints
+```
+
+The WSL artifacts are transfer payloads for VS Code Remote development on the disconnected Windows host. They include the Linux VS Code Server archive, Windows-side Remote WSL and Dev Containers VSIX files, and the Dev Containers bootstrap container image used by `Clone Repository in Container Volume`.
+
+The setup script expects Windows OpenSSH private keys under `%USERPROFILE%\.ssh` and requires the Windows `ssh-agent` service to be running. It calls `ssh-add` for every detected private key, so `ssh-add` should work from the same Windows environment before you run the setup script.
+
+### Useful Narrow Commands
+
+The module-level scripts are available when you want to work on one layer at a time. To package only the current artifact directory and configured image refs:
 
 ```bash
 ./scripts/package-artifacts.sh
@@ -56,7 +91,7 @@ That script saves `ARTIFACT_IMAGE_REFS` to `artifacts/docker-images/`, writes po
 
 ## Default Images
 
-Defaults live in `docker.env`:
+Online image defaults live in `config/docker.env`; WSL artifact defaults live in `config/wsl-artifacts.env`:
 
 ```text
 UPSTREAM_BASE_IMAGE:  mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
@@ -64,10 +99,11 @@ BASE_IMAGE:           devcontainers/base-dod:0.1.0
 BASE_VSCODE_IMAGE:    devcontainers/base-vscode:0.1.0
 BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
 BASE_VSCODE_VERSION:  1.124.2
-ARTIFACT_IMAGE_REFS:  devcontainers/base-dod:0.1.0 devcontainers/base-vscode:0.1.0
+ARTIFACT_IMAGE_REFS:  devcontainers/base-dod:0.1.0 devcontainers/base-vscode:0.1.0 devcontainers/base-toolchain:0.1.0
+WSL_ARTIFACT_ROOT:    artifacts/wsl
 ```
 
-Scripts load `docker.env` by default. To use a private override, set `DOCKER_ENV_FILE`; relative paths are resolved from the repo root.
+Scripts load `config/docker.env` by default. To use a private override, set `DOCKER_ENV_FILE`; relative paths are resolved from the repo root.
 
 ```bash
 DOCKER_ENV_FILE=.env ./src/base-vscode/scripts/prefetch-server.sh
@@ -139,6 +175,35 @@ The extension resolver reads `config/vscode-extensions.txt`, downloads compatibl
 artifacts/vscode-extensions/vscode-extensions.lock.json
 ```
 
+WSL bootstrap artifacts:
+
+```bash
+./src/wsl-artifacts/scripts/prefetch.sh
+./src/wsl-artifacts/scripts/test-artifacts.sh
+```
+
+The WSL workflow reads `config/wsl-artifacts.env`, downloads the matching Linux VS Code Server archive and Windows-side Remote WSL and Dev Containers VSIX files, then writes:
+
+```text
+artifacts/wsl/manifest.json
+```
+
+These files are not installed into `base-toolchain`. They are copied to the disconnected Windows host so VS Code can bootstrap Remote WSL, install the needed extensions, and avoid pulling the Dev Containers bootstrap image from the network.
+
+The workflow also builds the Dev Containers extension's default bootstrap container image for `Clone Repository in Container Volume` from that extension's bundled `bootstrap.Dockerfile`, then saves the image tar under:
+
+```text
+artifacts/wsl/docker-images/
+```
+
+On the disconnected Windows host, run the setup script to add local SSH keys to `ssh-agent`, load the saved bootstrap container image, install the VSIX files, set `dev.containers.bootstrapImage` with image pulling disabled, and optionally trigger the WSL-side server install:
+
+```powershell
+.\scripts\setup-wsl-artifacts.ps1 -Distro Ubuntu -WslRepoPath /home/me/devcontainer-blueprints
+```
+
+The script expects OpenSSH private keys under `%USERPROFILE%\.ssh` and a running Windows `ssh-agent` service. It calls `ssh-add` for each detected private key; if `ssh-add` does not work in Windows PowerShell, fix that first. If keys or the agent are missing, the script stops with a message before trying the VS Code setup.
+
 APT packages:
 
 ```bash
@@ -167,6 +232,19 @@ Single-module entry points:
 
 Tool versions and hashes live in `config/toolchain.env`. Empty hash fields are allowed while exploring; filled hashes are strict verification pins.
 
+The composed `base-toolchain` Dockerfile installs each module in its own layer. The default build enables every module, and each one can be turned off with a `BASE_TOOLCHAIN_INSTALL_*` setting in `config/docker.env` or a private `DOCKER_ENV_FILE`:
+
+```text
+BASE_TOOLCHAIN_INSTALL_APT
+BASE_TOOLCHAIN_INSTALL_PYTHON_PIP
+BASE_TOOLCHAIN_INSTALL_JAVA_MAVEN
+BASE_TOOLCHAIN_INSTALL_NODE
+BASE_TOOLCHAIN_INSTALL_CLI_TOOLS
+BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS
+BASE_TOOLCHAIN_INSTALL_RUST
+BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS
+```
+
 ## Build Notes
 
 Docker builds that consume artifacts run with `--network=none`.
@@ -187,33 +265,23 @@ Dockerfiles intentionally use the built-in BuildKit Dockerfile frontend. Avoid a
 
 ```bash
 jq empty .devcontainer/devcontainer.json .devcontainer/devcontainer-lock.json
-find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
-find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
 jq empty src/base-vscode/devcontainer-template.json src/base-vscode/.devcontainer/devcontainer.json src/base-toolchain/devcontainer-template.json src/base-toolchain/.devcontainer/devcontainer.json
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/wsl-artifacts/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/wsl-artifacts/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
 npm run test:vscode-extensions
-./src/base-toolchain/scripts/compare-cicd-common.sh
-find scripts src/base-vscode/scripts src/base-toolchain/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
+find scripts src/base-vscode/scripts src/base-toolchain/scripts src/wsl-artifacts/scripts src/apt-artifacts/scripts src/tool-artifacts -type f -name '*.sh' -printf '%m %p\n' | sort
 ```
 
-## Optional Registry Workflow
+## Optional Registry Override
 
 The default workflow uses the host Docker daemon image store and does not need a registry.
 
-To test push/pull behavior, start the local registry on port `5001`:
+To test push/pull behavior against a registry you already manage, create a private env file such as `docker.local.env`, override `REGISTRY` and the derived image refs, and run scripts with it:
 
 ```bash
-./scripts/start-local-registry.sh
-```
-
-Then copy the example config and run scripts with it:
-
-```bash
-cp docker.local.example.env docker.local.env
 DOCKER_ENV_FILE=docker.local.env ./scripts/pull-upstream-base-image.sh
 DOCKER_ENV_FILE=docker.local.env ./scripts/build-base-dod.sh
 ```
-
-Port `5001` is used because host port `5000` is commonly occupied by AirPlay Receiver on macOS.
 
 ## Concepts
 

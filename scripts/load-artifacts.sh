@@ -55,7 +55,7 @@ MANIFEST_PATH="${ARTIFACT_ROOT}/manifest.json"
 if [[ ! -d "${IMAGE_ARTIFACT_DIR}" ]]; then
   echo "ERROR: Docker image artifact directory not found:" >&2
   echo "  ${IMAGE_ARTIFACT_DIR}" >&2
-  echo "Run ./scripts/package-artifacts.sh on the connected machine first." >&2
+  echo "Run ./scripts/package-artifacts.sh on the online machine first." >&2
   exit 1
 fi
 

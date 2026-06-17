@@ -12,14 +12,14 @@ Options:
   --quality QUALITY            VS Code quality. Initial supported value: stable.
   --client-platform PLATFORM   Metadata platform, e.g. linux-x64 or linux-arm64.
   --server-platform PLATFORM   Server platform, e.g. server-linux-x64 or server-linux-arm64.
-  --artifact-root DIR          Artifact root. Default comes from docker.env.
+  --artifact-root DIR          Artifact root. Default comes from config/docker.env.
   -h, --help                   Show help.
 USAGE
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# shellcheck source=scripts/lib/env.sh
-source "${REPO_ROOT}/scripts/lib/env.sh"
+# shellcheck source=scripts/env.sh
+source "${REPO_ROOT}/scripts/env.sh"
 
 load_env_file "${REPO_ROOT}"
 

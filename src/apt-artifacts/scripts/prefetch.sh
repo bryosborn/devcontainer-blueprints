@@ -9,15 +9,15 @@ Usage:
 Options:
   --image IMAGE           Target image used for apt dependency resolution.
   --packages-file FILE    Newline-delimited package roots.
-  --artifact-root DIR     Artifact root. Default comes from docker.env.
+  --artifact-root DIR     Artifact root. Default comes from config/docker.env.
   --deadsnakes BOOL       Add deadsnakes PPA before resolving packages.
   -h, --help              Show help.
 USAGE
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# shellcheck source=scripts/lib/env.sh
-source "${REPO_ROOT}/scripts/lib/env.sh"
+# shellcheck source=scripts/env.sh
+source "${REPO_ROOT}/scripts/env.sh"
 
 load_env_file "${REPO_ROOT}"
 require_env_vars \

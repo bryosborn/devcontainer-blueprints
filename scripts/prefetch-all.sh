@@ -11,6 +11,7 @@ run_step() {
 
 run_step "${REPO_ROOT}/scripts/pull-upstream-base-image.sh"
 run_step "${REPO_ROOT}/src/base-vscode/scripts/prefetch-server.sh"
+run_step "${REPO_ROOT}/src/wsl-artifacts/scripts/prefetch.sh"
 run_step "${REPO_ROOT}/src/base-vscode/scripts/prefetch-extensions.sh"
 run_step "${REPO_ROOT}/src/apt-artifacts/scripts/prefetch.sh"
 run_step "${REPO_ROOT}/src/tool-artifacts/scripts/prefetch-all.sh"

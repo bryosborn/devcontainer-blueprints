@@ -1,8 +1,6 @@
 # Local scratch/test workspaces
 .tmp/
 scratch-project/
-cicd-common/
-cicd-common.zip
 
 # OS/editor noise
 .DS_Store

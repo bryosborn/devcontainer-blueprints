@@ -2,8 +2,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# shellcheck source=scripts/lib/env.sh
-source "${REPO_ROOT}/scripts/lib/env.sh"
+# shellcheck source=scripts/env.sh
+source "${REPO_ROOT}/scripts/env.sh"
 
 load_env_file "${REPO_ROOT}"
 

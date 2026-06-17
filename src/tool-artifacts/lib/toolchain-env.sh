@@ -23,9 +23,9 @@ load_toolchain_env() {
     exit 1
   fi
 
-  # Load docker.env first so toolchain.env can reference UPSTREAM_BASE_IMAGE.
-  # shellcheck source=scripts/lib/env.sh
-  source "${repo_root}/scripts/lib/env.sh"
+  # Load Docker image config first so toolchain.env can reference UPSTREAM_BASE_IMAGE.
+  # shellcheck source=scripts/env.sh
+  source "${repo_root}/scripts/env.sh"
   load_env_file "${repo_root}"
 
   # shellcheck source=/dev/null

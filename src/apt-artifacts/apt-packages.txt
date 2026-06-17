@@ -1,4 +1,4 @@
-# APT package roots adapted from the cicd-common Dockerfile.
+# APT package roots for the composed toolchain image.
 #
 # The prefetch script resolves and downloads the transitive .deb set from the
 # configured target image and apt sources. Keep this list to the packages we

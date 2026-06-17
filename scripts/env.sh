@@ -3,7 +3,7 @@
 
 resolve_env_file() {
   local repo_root="$1"
-  local env_file="${DOCKER_ENV_FILE:-${repo_root}/docker.env}"
+  local env_file="${DOCKER_ENV_FILE:-${repo_root}/config/docker.env}"
 
   if [[ "${env_file}" != /* ]]; then
     env_file="${repo_root}/${env_file}"

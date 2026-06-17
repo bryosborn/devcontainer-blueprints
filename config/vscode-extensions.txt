@@ -11,3 +11,5 @@ ms-python.python
 ms-toolsai.jupyter
 vscjava.vscode-java-pack
 ms-vscode-remote.vscode-remote-extensionpack
+AykutSarac.jsoncrack-vscode
+humao.rest-client

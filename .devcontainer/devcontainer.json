@@ -21,7 +21,8 @@
       "extensions": [
         "ms-vscode-remote.remote-containers",
         "timonwong.shellcheck",
-        "openai.chatgpt"
+        "openai.chatgpt",
+        "ms-vscode.PowerShell"
       ]
     }
   },
