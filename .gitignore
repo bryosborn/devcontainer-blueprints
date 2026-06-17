@@ -15,6 +15,7 @@ cicd-common.zip
 
 # Downloaded artifacts
 artifacts/
+artifacts2/
 
 # Packaged artifact bundles
 artifacts-*.tar.gz
