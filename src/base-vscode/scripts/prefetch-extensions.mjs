@@ -379,7 +379,7 @@ function candidateTargetPlatform(version, fallbackPlatform) {
 }
 
 function collectCandidates(platformExtension, universalExtension, targetPlatform) {
-  const candidates = new Map();
+  let candidates = new Map();
 
   function add(extension, sourcePlatform) {
     if (!extension) {
@@ -402,6 +402,15 @@ function collectCandidates(platformExtension, universalExtension, targetPlatform
 
   add(platformExtension, targetPlatform);
   add(universalExtension, "universal");
+
+    // console.log("INFO new: ", platformExtension.extensionName, targetPlatform);
+  
+    if (platformExtension && platformExtension.extensionName.includes("rust-analyzer")) {
+      console.log("here 1")
+      candidates = new Map(
+        Array.from(candidates.entries()).filter(([key, value]) => {return !value.versionString.includes("0.4");})
+      );
+    }
 
   return [...candidates.values()].sort((a, b) => {
     const versionCompare = versionSortDescending(
