@@ -48,7 +48,8 @@ Docker platform:     linux/amd64
 - `scripts/prefetch-all.sh`: Online-machine wrapper for all artifact prefetch steps.
 - `scripts/build-all.sh`: Online-machine wrapper for the DOD, VS Code, and toolchain image builds.
 - `scripts/test-all.sh`: Wrapper for the current smoke/offline test suite.
-- `scripts/scan-images-trivy.sh`: Verifies configured project images exist in the host Docker image store, scans them with Trivy, and writes vulnerability reports and CycloneDX SBOMs under `artifacts/trivy-output/`.
+- `scripts/scan-images-trivy.sh`: Verifies configured project images exist in the host Docker image store, scans them with Trivy, and writes vulnerability reports, CycloneDX SBOMs, and a combined CSV under `artifacts/trivy-output/`.
+- `scripts/summarize-trivy-vulnerabilities.py`: Combines Trivy vulnerability JSON reports into a spreadsheet-compatible CSV with package and fix-version details.
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
 - `scripts/package-artifacts.sh`: Saves configured `ARTIFACT_IMAGE_REFS` into `artifacts/docker-images/`, writes `artifacts/manifest.json`, then creates a tar.gz bundle of the full `artifacts/` directory.
@@ -230,3 +231,5 @@ Current lessons:
 - 2026-09-04 - Finding: On the observed ARM64 Docker Desktop image store, `docker pull --platform linux/amd64` retained the host-native variant. The upstream-image step therefore materializes the requested variant with an explicit-platform Docker build before verifying it.
 - 2026-09-04 - Decision: The bootstrap `.devcontainer` uses multi-architecture `mcr.microsoft.com/devcontainers/base:3.0.3-ubuntu22.04` and runs natively on the host; this is independent of the project images and artifacts selected by `DOCKER_PLATFORM`.
 - 2026-09-04 - Decision: Trivy scans use the configured `ARTIFACT_IMAGE_REFS` from the host Docker image store and write vulnerability JSON, CycloneDX JSON SBOMs, and a TSV summary under `artifacts/trivy-output/`.
+- 2026-09-04 - Decision: The Trivy workflow also writes a deduplicated `vulnerabilities.csv` across all configured images so findings can be filtered by container, CVE, severity, affected package, and version/fix data.
+- 2026-09-04 - Decision: The combined Trivy CSV leads with container, CVE, a `YES--SEVERITY`/`NO--SEVERITY` triage field, UTC-relative vulnerability age, status, and remediation, followed by package, version, advisory, PURL, and layer details.

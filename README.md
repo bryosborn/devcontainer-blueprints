@@ -98,9 +98,14 @@ generate a CycloneDX SBOM for each image:
 ```
 
 This requires `trivy` and writes JSON vulnerability reports, CycloneDX JSON
-SBOMs, and `vulnerability-summary.tsv` under `artifacts/trivy-output/`. The
-script checks all images in `ARTIFACT_IMAGE_REFS` locally before scanning and
-does not pull a missing image from a registry.
+SBOMs, `vulnerability-summary.tsv`, and a combined `vulnerabilities.csv`
+spreadsheet under `artifacts/trivy-output/`. The spreadsheet identifies the
+container, CVE, combined fix-availability/severity value, days since
+publication, status, remediation, scanner target, package class and ecosystem,
+package path, installed/fixed versions, CVSS score, advisory details, PURL, and
+image layer for each unique finding. The script checks all images in
+`ARTIFACT_IMAGE_REFS` locally before scanning and does not pull a missing image
+from a registry.
 
 To remove generated artifacts, temporary build workspaces, resolver dependencies, and packaged artifact bundles:
 

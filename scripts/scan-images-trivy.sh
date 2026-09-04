@@ -8,7 +8,7 @@ source "${REPO_ROOT}/scripts/env.sh"
 load_env_file "${REPO_ROOT}"
 require_env_vars ARTIFACT_IMAGE_REFS
 
-for command_name in docker trivy jq; do
+for command_name in docker trivy jq python3; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: ${command_name}" >&2
     exit 1
@@ -39,11 +39,13 @@ output_dir="${REPO_ROOT}/artifacts/trivy-output"
 mkdir -p "${output_dir}"
 summary_file="${output_dir}/vulnerability-summary.tsv"
 printf 'IMAGE\tUNKNOWN\tLOW\tMEDIUM\tHIGH\tCRITICAL\tTOTAL\n' > "${summary_file}"
+vulnerability_reports=()
 
 for image_ref in "${image_refs[@]}"; do
   output_name="$(printf '%s' "${image_ref}" | sed 's/[^[:alnum:]._-]/_/g')"
   vulnerability_report="${output_dir}/${output_name}.vulnerabilities.json"
   sbom_report="${output_dir}/${output_name}.sbom.cdx.json"
+  vulnerability_reports+=("${vulnerability_report}")
 
   echo "Scanning ${image_ref}"
   trivy image \
@@ -76,8 +78,12 @@ for image_ref in "${image_refs[@]}"; do
   ' "${vulnerability_report}" >> "${summary_file}"
 done
 
+python3 "${REPO_ROOT}/scripts/summarize-trivy-vulnerabilities.py" \
+  --output "${output_dir}/vulnerabilities.csv" \
+  "${vulnerability_reports[@]}"
+
 echo
-echo "Trivy reports and SBOMs written to:"
+echo "Trivy reports, SBOMs, and vulnerability spreadsheet written to:"
 echo "  ${output_dir}"
 echo
 column -t -s $'\t' "${summary_file}" 2>/dev/null || cat "${summary_file}"
