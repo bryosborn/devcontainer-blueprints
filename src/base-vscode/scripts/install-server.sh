@@ -134,6 +134,21 @@ install_archive_to_dir() {
   mv "${staging_dir}" "${target_dir}"
 }
 
+install_linked_layout() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local staging_dir="${target_dir}.staging.$$"
+
+  rm -rf "${staging_dir}"
+  mkdir -p "${staging_dir}"
+  # The layouts are immutable copies of the same commit. Hard-linking their
+  # regular files keeps both paths compatible without doubling the image layer.
+  cp -a --link "${source_dir}/." "${staging_dir}/"
+  mkdir -p "$(dirname "${target_dir}")"
+  rm -rf "${target_dir}"
+  mv "${staging_dir}" "${target_dir}"
+}
+
 echo "Installing VS Code Server for commit:"
 echo "  ${COMMIT}"
 echo "Archive:"
@@ -148,14 +163,8 @@ install_archive_to_dir "${CURRENT_DIR}"
 if [[ "${INSTALL_LEGACY}" -eq 1 ]]; then
   echo "Installing legacy layout:"
   echo "  ${LEGACY_DIR}"
-  install_archive_to_dir "${LEGACY_DIR}"
+  install_linked_layout "${CURRENT_DIR}" "${LEGACY_DIR}"
   touch "${LEGACY_DIR}/0"
-fi
-
-if command -v chown >/dev/null 2>&1 && id "${REMOTE_USER}" >/dev/null 2>&1; then
-  echo "Setting ownership of ${VSCODE_ROOT} to ${REMOTE_USER}."
-  chown -R "${REMOTE_USER}:${REMOTE_USER}" "${VSCODE_ROOT}" 2>/dev/null \
-    || chown -R "${REMOTE_USER}" "${VSCODE_ROOT}"
 fi
 
 echo "Validating code-server binary."
@@ -168,5 +177,13 @@ fi
 
 cat /tmp/vscode-server-version.txt
 rm -f /tmp/vscode-server-version.txt
+
+# code-server may create empty data/extension directories while validating.
+# Apply final ownership afterward so the remote user can populate them later.
+if command -v chown >/dev/null 2>&1 && id "${REMOTE_USER}" >/dev/null 2>&1; then
+  echo "Setting ownership of ${VSCODE_ROOT} to ${REMOTE_USER}."
+  chown -R "${REMOTE_USER}:${REMOTE_USER}" "${VSCODE_ROOT}" 2>/dev/null \
+    || chown -R "${REMOTE_USER}" "${VSCODE_ROOT}"
+fi
 
 echo "VS Code Server install complete."
