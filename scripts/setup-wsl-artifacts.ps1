@@ -12,6 +12,7 @@ param(
     [string]$Distro,
     [string]$WslRepoPath,
     [string]$WslArtifactRoot = "artifacts/wsl",
+    [string]$ServerPlatform,
     [string]$WslServerHome,
     [string]$WslUser,
     [switch]$NoLegacyLayout,
@@ -281,13 +282,25 @@ if (-not $NoVerify) {
     }
 }
 
-$serverArtifact = @($artifacts | Where-Object { $_.kind -eq "vscode-server" -and $_.platform -eq "server-linux-x64" } | Select-Object -First 1)
+$availableServerPlatforms = @($artifacts |
+    Where-Object { $_.kind -eq "vscode-server" } |
+    ForEach-Object { [string]$_.platform } |
+    Sort-Object -Unique)
+
+if ([string]::IsNullOrWhiteSpace($ServerPlatform)) {
+    if ($availableServerPlatforms.Count -ne 1) {
+        throw "Could not select a VS Code Server platform from $ManifestPath. Pass -ServerPlatform. Available platforms: $($availableServerPlatforms -join ', ')"
+    }
+    $ServerPlatform = $availableServerPlatforms[0]
+}
+
+$serverArtifact = @($artifacts | Where-Object { $_.kind -eq "vscode-server" -and $_.platform -eq $ServerPlatform } | Select-Object -First 1)
 $extensionArtifacts = @($artifacts | Where-Object { $_.kind -eq "vscode-extension" })
 $dockerImageArtifacts = @($artifacts | Where-Object { $_.kind -eq "docker-image" })
 $bootstrapImageArtifacts = @($dockerImageArtifacts | Where-Object { -not [string]::IsNullOrWhiteSpace($_.bootstrapImageRef) } | Select-Object -First 1)
 
 if ($serverArtifact.Count -eq 0) {
-    throw "No server-linux-x64 VS Code Server artifact found in $ManifestPath"
+    throw "No $ServerPlatform VS Code Server artifact found in $ManifestPath"
 }
 
 if ($extensionArtifacts.Count -eq 0) {

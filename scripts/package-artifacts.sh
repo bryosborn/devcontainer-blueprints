@@ -146,11 +146,13 @@ ensure_image_available() {
   local image_ref="$1"
 
   if docker image inspect "${image_ref}" >/dev/null 2>&1; then
+    assert_local_image_platform "${image_ref}"
     return
   fi
 
   if [[ "${PULL_MISSING}" -eq 1 ]] && is_pullable_image_ref "${image_ref}"; then
-    docker pull "${image_ref}"
+    docker pull --platform "${DOCKER_PLATFORM}" "${image_ref}"
+    assert_local_image_platform "${image_ref}"
     return
   fi
 
@@ -176,11 +178,13 @@ trap 'rm -f "${manifest_tmp}"' EXIT
 jq -n \
   --arg generatedAt "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
   --arg configFile "${CONFIG_FILE}" \
+  --arg targetPlatform "${DOCKER_PLATFORM}" \
   --arg artifactRoot "$(basename "${ARTIFACT_ROOT}")" \
   '{
     schemaVersion: 1,
     generatedAt: $generatedAt,
     configFile: $configFile,
+    targetPlatform: $targetPlatform,
     artifactRoot: $artifactRoot,
     images: []
   }' > "${manifest_tmp}"
@@ -206,10 +210,12 @@ for image_ref in "${IMAGE_REFS[@]}"; do
 
   jq \
     --arg ref "${image_ref}" \
+    --arg platform "${DOCKER_PLATFORM}" \
     --arg tar "${image_tar_relative}" \
     --arg sha256 "${image_sha256}" \
     '.images += [{
       ref: $ref,
+      platform: $platform,
       tar: $tar,
       sha256: $sha256
     }]' \

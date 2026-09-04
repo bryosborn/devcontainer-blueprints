@@ -51,6 +51,7 @@ echo "Testing base VS Code image:"
 echo "  ${BASE_VSCODE_IMAGE}"
 
 docker run --rm \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   -e "BASE_VSCODE_COMMIT=${RESOLVED_BASE_VSCODE_COMMIT}" \
   "${BASE_VSCODE_IMAGE}" \

@@ -14,6 +14,10 @@ USAGE
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/env.sh
+source "${REPO_ROOT}/scripts/env.sh"
+
+load_env_file "${REPO_ROOT}"
 
 ARTIFACT_ROOT="${REPO_ROOT}/artifacts"
 VERIFY_HASHES=1
@@ -96,6 +100,14 @@ if [[ -f "${MANIFEST_PATH}" ]]; then
   while IFS= read -r image_ref; do
     image_refs+=("${image_ref}")
   done < <(jq -r '.images[].ref' "${MANIFEST_PATH}")
+
+  manifest_platform="$(jq -r '.targetPlatform // empty' "${MANIFEST_PATH}")"
+  if [[ -n "${manifest_platform}" && "${manifest_platform}" != "${DOCKER_PLATFORM}" ]]; then
+    echo "ERROR: Artifact bundle target platform does not match this configuration:" >&2
+    echo "  bundle: ${manifest_platform}" >&2
+    echo "  config: ${DOCKER_PLATFORM}" >&2
+    exit 1
+  fi
 else
   shopt -s nullglob
   image_tars=("${IMAGE_ARTIFACT_DIR}"/*.tar)
@@ -123,7 +135,7 @@ done
 if ((${#image_refs[@]} > 0)); then
   echo "Verifying loaded Docker image refs:"
   for image_ref in "${image_refs[@]}"; do
-    docker image inspect "${image_ref}" >/dev/null
+    assert_local_image_platform "${image_ref}"
     echo "  ${image_ref}"
   done
 fi

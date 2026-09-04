@@ -20,7 +20,7 @@ echo "  ${CONFIG_FILE}"
 echo "Testing DOD base image:"
 echo "  ${BASE_IMAGE}"
 
-docker run --rm "${BASE_IMAGE}" bash -lc '
+docker run --rm --platform "${DOCKER_PLATFORM}" "${BASE_IMAGE}" bash -lc '
   set -euo pipefail
 
   docker --version

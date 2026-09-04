@@ -7,7 +7,7 @@
       "BASE_IMAGE": "${templateOption:baseImage}",
       "VSCODE_COMMIT": "${templateOption:vscodeCommit}",
       "VSCODE_QUALITY": "${templateOption:vscodeQuality}",
-      "VSCODE_SERVER_PLATFORM": "server-linux-x64",
+      "VSCODE_SERVER_PLATFORM": "${templateOption:vscodeServerPlatform}",
       "VSCODE_REMOTE_USER": "vscode"
     }
   },

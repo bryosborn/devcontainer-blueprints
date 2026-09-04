@@ -22,6 +22,7 @@ echo "  ${BASE_TOOLCHAIN_IMAGE}"
 
 run_image() {
   docker run --rm \
+    --platform "${DOCKER_PLATFORM}" \
     --network=none \
     --user root \
     "$@"
@@ -31,6 +32,7 @@ run_rust_compile_smoke() {
   local image="$1"
 
   docker run --rm \
+    --platform "${DOCKER_PLATFORM}" \
     --network=none \
     --user root \
     "${image}" \
@@ -84,6 +86,7 @@ RUST_SMOKE
 }
 
 docker run --rm \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   --user root \
   -e "BASE_VSCODE_REMOTE_USER=${BASE_VSCODE_REMOTE_USER}" \
@@ -105,9 +108,12 @@ docker run --rm \
       *) echo "ERROR: /usr/local/cargo/bin missing from PATH" >&2; exit 1 ;;
     esac
     test "$(readlink /usr/bin/kubectl)" = "/opt/kubectl/client/bin/kubectl"
-    test "$(readlink /usr/bin/yq)" = "/opt/yq/yq_linux_amd64"
+    case "$(readlink /usr/bin/yq)" in
+      /opt/yq/yq_linux_*) ;;
+      *) echo "ERROR: /usr/bin/yq does not point to a platform-specific yq binary." >&2; exit 1 ;;
+    esac
     test -x /opt/kubectl/client/bin/kubectl
-    test -x /opt/yq/yq_linux_amd64
+    test -x "$(readlink -f /usr/bin/yq)"
 
     "${code_server}" --version
     "${code_server}" \

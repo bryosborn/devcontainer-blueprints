@@ -23,6 +23,15 @@
         "insider"
       ],
       "description": "VS Code update channel used to fetch the server archive."
+    },
+    "vscodeServerPlatform": {
+      "type": "string",
+      "default": "server-linux-x64",
+      "enum": [
+        "server-linux-x64",
+        "server-linux-arm64"
+      ],
+      "description": "Target platform of the VS Code Server archive."
     }
   }
 }

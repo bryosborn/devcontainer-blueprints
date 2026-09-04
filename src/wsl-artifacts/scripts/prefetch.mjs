@@ -32,6 +32,7 @@ Options:
   --no-bootstrap-image          Do not build/save the Dev Containers bootstrap container image.
   --bootstrap-extension ID      Dev Containers extension ID. Default comes from WSL_DEVCONTAINERS_BOOTSTRAP_EXTENSION.
   --bootstrap-image-name NAME   Bootstrap image repository. Default comes from WSL_DEVCONTAINERS_BOOTSTRAP_IMAGE_NAME.
+  --docker-platform PLATFORM    Platform for the bootstrap container image. Default comes from DOCKER_PLATFORM.
   --print                       Print manifest to stdout as well as writing it.
   -h, --help                    Show help.`);
 }
@@ -67,6 +68,7 @@ function parseArgs(argv) {
     prefetchBootstrapImage: booleanFromEnv(process.env.WSL_PREFETCH_DEVCONTAINERS_BOOTSTRAP_IMAGE, true),
     bootstrapExtension: process.env.WSL_DEVCONTAINERS_BOOTSTRAP_EXTENSION || "ms-vscode-remote.remote-containers",
     bootstrapImageName: process.env.WSL_DEVCONTAINERS_BOOTSTRAP_IMAGE_NAME || "vsc-volume-bootstrap",
+    dockerPlatform: process.env.DOCKER_PLATFORM || "linux/amd64",
     print: false,
     serverPlatformsOverridden: false,
     extensionsOverridden: false
@@ -114,6 +116,9 @@ function parseArgs(argv) {
       case "--bootstrap-image-name":
         args.bootstrapImageName = argv[++index];
         break;
+      case "--docker-platform":
+        args.dockerPlatform = argv[++index];
+        break;
       case "--print":
         args.print = true;
         break;
@@ -142,6 +147,10 @@ function parseArgs(argv) {
     if (!args.extensions.some((extensionId) => normalizeExtensionId(extensionId) === bootstrapExtension)) {
       args.extensions.push(args.bootstrapExtension);
     }
+  }
+
+  if (!["linux/amd64", "linux/arm64"].includes(args.dockerPlatform)) {
+    throw new Error(`Unsupported Docker platform: ${args.dockerPlatform}`);
   }
 
   return args;
@@ -517,11 +526,11 @@ function defaultCaCertificates() {
   return Buffer.from("");
 }
 
-function dockerImageOutputPath(artifactRoot, imageRef) {
+function dockerImageOutputPath(artifactRoot, imageRef, dockerPlatform) {
   return path.join(
     artifactRoot,
     "docker-images",
-    `${sanitizePathPart(imageRef)}.tar`
+    `${sanitizePathPart(imageRef)}-${sanitizePathPart(dockerPlatform)}.tar`
   );
 }
 
@@ -541,7 +550,7 @@ async function buildDevContainersBootstrapImage(root, artifactRoot, extensionDow
   const extensionVersion = extensionArtifact.version;
   const imageRef = `${args.bootstrapImageName}:${extensionVersion}`;
   const defaultImageRef = `${args.bootstrapImageName}:latest`;
-  const outputPath = dockerImageOutputPath(artifactRoot, imageRef);
+  const outputPath = dockerImageOutputPath(artifactRoot, imageRef, args.dockerPlatform);
   let reused = fs.existsSync(outputPath);
   const dockerfileArtifactPath = path.join(
     artifactRoot,
@@ -580,6 +589,8 @@ async function buildDevContainersBootstrapImage(root, artifactRoot, extensionDow
       console.log(`Building Dev Containers bootstrap container image: ${imageRef}`);
       await runCommand("docker", [
         "build",
+        "--platform",
+        args.dockerPlatform,
         "--pull",
         "-f",
         path.join(contextDir, "bootstrap.Dockerfile"),
@@ -628,6 +639,7 @@ async function buildDevContainersBootstrapImage(root, artifactRoot, extensionDow
     bootstrapImageRef: imageRef,
     defaultImageRef,
     imageRefs: [imageRef, defaultImageRef],
+    platform: args.dockerPlatform,
     baseImage: parseBaseImage(dockerfileText),
     imageId: imageInspect?.Id ?? "",
     repoTags: imageInspect?.RepoTags ?? [imageRef, defaultImageRef],
@@ -691,6 +703,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     purpose: "Downloaded VS Code WSL bootstrap artifacts for transfer.",
     vscode,
+    dockerPlatform: args.dockerPlatform,
     artifactRoot: path.relative(root, artifactRoot).split(path.sep).join("/"),
     artifacts
   };

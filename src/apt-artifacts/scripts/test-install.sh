@@ -27,13 +27,14 @@ fi
 IMAGE_TAG="apt-artifacts-install-test:latest"
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   -f "${REPO_ROOT}/src/apt-artifacts/test/Dockerfile.apt" \
   --build-arg "BASE_IMAGE=${APT_PREFETCH_IMAGE}" \
   -t "${IMAGE_TAG}" \
   "${REPO_ROOT}"
 
-docker run --rm "${IMAGE_TAG}" bash -lc '
+docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc '
   set -euo pipefail
   jq --version
   git --version

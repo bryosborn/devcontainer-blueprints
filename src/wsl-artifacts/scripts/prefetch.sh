@@ -31,8 +31,8 @@ done
 cd "${REPO_ROOT}"
 
 if [[ ! -d node_modules ]]; then
-  echo "node_modules is missing. Running npm install for resolver tooling."
-  npm install
+  echo "node_modules is missing. Installing locked resolver tooling without npm audit."
+  npm ci --no-audit --no-fund
 fi
 
 export WSL_ARTIFACT_ROOT

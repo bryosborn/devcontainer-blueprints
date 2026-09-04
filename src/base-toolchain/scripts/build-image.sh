@@ -196,6 +196,7 @@ for bool_var in "${bool_vars[@]}"; do
 done
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   --build-context "apt_artifacts=${APT_CONTEXT}" \
   --build-context "toolchain_artifacts=${TOOLCHAIN_CONTEXT}" \
@@ -213,6 +214,8 @@ docker build \
   -f "${WORKSPACE}/Dockerfile" \
   -t "${BASE_TOOLCHAIN_IMAGE}" \
   "${WORKSPACE}"
+
+assert_local_image_platform "${BASE_TOOLCHAIN_IMAGE}"
 
 if image_has_registry "${BASE_TOOLCHAIN_IMAGE}"; then
   docker push "${BASE_TOOLCHAIN_IMAGE}"

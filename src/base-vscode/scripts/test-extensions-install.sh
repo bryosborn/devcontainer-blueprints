@@ -57,6 +57,7 @@ echo "Building offline VS Code extension install test image:"
 echo "  ${IMAGE_TAG}"
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   -f "${REPO_ROOT}/src/base-vscode/test/Dockerfile.extensions" \
   --build-arg "BASE_IMAGE=${BASE_IMAGE:-mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04}" \
@@ -69,7 +70,7 @@ docker build \
 
 echo "Running validation inside image."
 
-docker run --rm "${IMAGE_TAG}" bash -lc "
+docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc "
   set -euo pipefail
 
   CODE_SERVER=\"/home/vscode/.vscode-server/cli/servers/Stable-${COMMIT}/server/bin/code-server\"

@@ -124,6 +124,7 @@ echo "  ${BASE_VSCODE_IMAGE}"
 build_args=(
   --workspace-folder "${WORKSPACE}"
   --image-name "${BASE_VSCODE_IMAGE}"
+  --platform "${DOCKER_PLATFORM}"
 )
 
 if image_has_registry "${BASE_VSCODE_IMAGE}"; then
@@ -131,6 +132,7 @@ if image_has_registry "${BASE_VSCODE_IMAGE}"; then
 fi
 
 devcontainer build "${build_args[@]}"
+assert_local_image_platform "${BASE_VSCODE_IMAGE}"
 
 echo "Built base VS Code image:"
 echo "  ${BASE_VSCODE_IMAGE}"

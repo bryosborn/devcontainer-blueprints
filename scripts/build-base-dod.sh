@@ -93,9 +93,11 @@ echo "  ${DOD_COMPOSE_SWITCH_VERSION}"
 build_args=(
   --workspace-folder "${WORKSPACE}"
   --image-name "${FEATURE_IMAGE}"
+  --platform "${DOCKER_PLATFORM}"
 )
 
 devcontainer build "${build_args[@]}"
+assert_local_image_platform "${FEATURE_IMAGE}"
 
 {
   printf 'FROM %s\n\n' "${FEATURE_IMAGE}"
@@ -126,10 +128,13 @@ EOF
 } > "${WORKSPACE}/Dockerfile.compose-switch"
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --build-arg "COMPOSE_SWITCH_VERSION=${DOD_COMPOSE_SWITCH_VERSION}" \
   --tag "${BASE_IMAGE}" \
   --file "${WORKSPACE}/Dockerfile.compose-switch" \
   "${WORKSPACE}"
+
+assert_local_image_platform "${BASE_IMAGE}"
 
 if image_has_registry "${BASE_IMAGE}"; then
   docker push "${BASE_IMAGE}"

@@ -20,6 +20,7 @@ fi
 IMAGE_TAG="toolchain-java-maven-test:latest"
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   --build-context "toolchain_artifacts=${ARTIFACT_ROOT}/java-maven" \
   -f "${REPO_ROOT}/src/tool-artifacts/java-maven/test/Dockerfile" \
@@ -27,7 +28,7 @@ docker build \
   -t "${IMAGE_TAG}" \
   "${REPO_ROOT}/src/tool-artifacts/java-maven"
 
-docker run --rm "${IMAGE_TAG}" bash -lc '
+docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc '
   set -euo pipefail
   java --version
   javac --version

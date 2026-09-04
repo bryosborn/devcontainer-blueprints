@@ -141,11 +141,14 @@ EOF
 } > "${WORKSPACE}/Dockerfile"
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --build-arg "INCLUDE_DEADSNAKES=${INCLUDE_DEADSNAKES}" \
   --tag "${PREFETCH_TAG}" \
   "${WORKSPACE}"
 
-container_id="$(docker create "${PREFETCH_TAG}")"
+assert_local_image_platform "${PREFETCH_TAG}"
+
+container_id="$(docker create --platform "${DOCKER_PLATFORM}" "${PREFETCH_TAG}")"
 trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
 
 rm -rf "${ARTIFACT_ROOT}"

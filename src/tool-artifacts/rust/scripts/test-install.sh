@@ -20,6 +20,7 @@ fi
 IMAGE_TAG="toolchain-rust-test:latest"
 
 docker build \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   --build-context "toolchain_artifacts=${ARTIFACT_ROOT}/rust" \
   -f "${REPO_ROOT}/src/tool-artifacts/rust/test/Dockerfile" \
@@ -28,6 +29,7 @@ docker build \
   "${REPO_ROOT}/src/tool-artifacts/rust"
 
 docker run --rm \
+  --platform "${DOCKER_PLATFORM}" \
   --network=none \
   -e "EXPECTED_RUST_TOOLCHAIN=${RUST_TOOLCHAIN}" \
   "${IMAGE_TAG}" \
@@ -98,6 +100,7 @@ RUST_SMOKE
 read -r -a rust_components <<< "${RUST_COMPONENTS:-}"
 for component in "${rust_components[@]}"; do
   docker run --rm \
+    --platform "${DOCKER_PLATFORM}" \
     --network=none \
     -e "EXPECTED_COMPONENT=${component}" \
     -e "EXPECTED_RUST_TOOLCHAIN=${RUST_TOOLCHAIN}" \
