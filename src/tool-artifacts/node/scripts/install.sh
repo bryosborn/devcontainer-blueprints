@@ -43,8 +43,12 @@ if [[ -z "${node_archive}" ]]; then
   exit 1
 fi
 
+node_version=$(basename "$node_archive" | sed -E 's/^node-(v[^-]+)-linux-.*$/\1/')
+
 rm -rf /opt/node
 mkdir -p /opt/node
+mkdir -p /opt/downloads/node/$node_version/
+cp "${node_archive}" /opt/downloads/node/$node_version/
 tar -xzf "${node_archive}" -C /opt/node --strip-components=1 --no-same-owner
 
 for binary in node npm npx corepack; do

@@ -19,6 +19,7 @@ libssl-dev
 cmake
 libclang-dev
 clang
+clamav
 fonts-liberation
 libasound2
 libatk-bridge2.0-0
