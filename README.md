@@ -89,12 +89,21 @@ The module-level scripts are available when you want to work on one layer at a t
 
 That script saves `ARTIFACT_IMAGE_REFS` to `artifacts/docker-images/`, writes portable SHA256 files and `artifacts/manifest.json`, and creates `artifacts-<toolchain-name>-<version>.tar.gz` at the repo root.
 
+To remove generated artifacts, temporary build workspaces, resolver dependencies, and packaged artifact bundles:
+
+```bash
+./scripts/clean.sh
+```
+
+Use `./scripts/clean.sh --docker-images` to also remove the repository's built and test Docker images. It does not force-remove images used by a container.
+
 ## Default Images
 
 Online image defaults live in `config/docker.env`; WSL artifact defaults live in `config/wsl-artifacts.env`:
 
 ```text
 UPSTREAM_BASE_IMAGE:  mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+DOCKER_PLATFORM:      linux/amd64
 BASE_IMAGE:           devcontainers/base-dod:0.1.0
 BASE_VSCODE_IMAGE:    devcontainers/base-vscode:0.1.0
 BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
@@ -102,6 +111,26 @@ BASE_VSCODE_VERSION:  1.124.2
 ARTIFACT_IMAGE_REFS:  devcontainers/base-dod:0.1.0 devcontainers/base-vscode:0.1.0 devcontainers/base-toolchain:0.1.0
 WSL_ARTIFACT_ROOT:    artifacts/wsl
 ```
+
+`DOCKER_PLATFORM` is the canonical image and artifact target. The shared
+environment loader derives matching VS Code Server/extension, toolchain, and
+Rust selectors, exports `DOCKER_DEFAULT_PLATFORM`, and the Docker workflows
+also pass the platform explicitly. The supported targets are `linux/amd64` and
+`linux/arm64`; the default is AMD64, so an ARM64 online preparation machine
+uses Docker emulation to create AMD64 images.
+
+The current artifact layout is intentionally single-target. Before changing
+`DOCKER_PLATFORM`, clear generated state and regenerate it for the new target:
+
+```bash
+./scripts/clean.sh
+./scripts/prefetch-all.sh
+./scripts/build-all.sh
+```
+
+The WSL Windows-client setting remains independent of `DOCKER_PLATFORM`.
+`WSL_SERVER_PLATFORMS` defaults to the selected container target but can be
+overridden when the WSL distribution uses another supported server platform.
 
 Scripts load `config/docker.env` by default. To use a private override, set `DOCKER_ENV_FILE`; relative paths are resolved from the repo root.
 
@@ -188,6 +217,10 @@ The WSL workflow reads `config/wsl-artifacts.env`, downloads the matching Linux 
 artifacts/wsl/manifest.json
 ```
 
+If its resolver dependency directory is absent, the workflow restores the locked
+Node dependencies with `npm ci --no-audit --no-fund`; this avoids waiting on the
+optional npm vulnerability-audit service during prefetch.
+
 These files are not installed into `base-toolchain`. They are copied to the disconnected Windows host so VS Code can bootstrap Remote WSL, install the needed extensions, and avoid pulling the Dev Containers bootstrap image from the network.
 
 The workflow also builds the Dev Containers extension's default bootstrap container image for `Clone Repository in Container Volume` from that extension's bundled `bootstrap.Dockerfile`, then saves the image tar under:
@@ -231,6 +264,11 @@ Single-module entry points:
 ```
 
 Tool versions and hashes live in `config/toolchain.env`. Empty hash fields are allowed while exploring; filled hashes are strict verification pins.
+
+Rust prefetch runs the target `rustup-init` binary. If the online host and the
+selected target differ, the Rust script creates that cache in a target-platform
+Docker build instead of trying to execute a foreign-architecture binary on the
+host.
 
 The composed `base-toolchain` Dockerfile installs each module in its own layer. The default build enables every module, and each one can be turned off with a `BASE_TOOLCHAIN_INSTALL_*` setting in `config/docker.env` or a private `DOCKER_ENV_FILE`:
 

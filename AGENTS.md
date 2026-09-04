@@ -36,6 +36,7 @@ BASE_VSCODE_IMAGE:   devcontainers/base-vscode:0.1.0
 BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
 BASE_VSCODE_VERSION: 1.124.2
 Default config:      config/docker.env
+Docker platform:     linux/amd64
 ```
 
 ## Repository Map
@@ -50,6 +51,7 @@ Default config:      config/docker.env
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
 - `scripts/package-artifacts.sh`: Saves configured `ARTIFACT_IMAGE_REFS` into `artifacts/docker-images/`, writes `artifacts/manifest.json`, then creates a tar.gz bundle of the full `artifacts/` directory.
+- `scripts/clean.sh`: Removes generated artifacts, temporary build workspaces, resolver dependencies, packaged artifact bundles, and optionally removable project Docker images.
 - `scripts/load-artifacts.sh`: Disconnected-machine helper that verifies and `docker load`s bundled image tar files.
 - `scripts/setup-wsl-artifacts.ps1`: Windows host helper that verifies `artifacts/wsl/`, requires Windows `ssh-agent` to be running, adds every OpenSSH private key in `%USERPROFILE%\.ssh`, loads WSL Docker image artifacts, sets `dev.containers.bootstrapImage`, installs the VSIX files with `code`, and can invoke the WSL-side VS Code Server install.
 - `scripts/test-base-dod.sh`: Smoke tests the DOD base image.
@@ -109,6 +111,11 @@ Default config:      config/docker.env
 - `config/docker.env` records the Docker runtime versions observed from the DOD feature when it installed latest packages: Docker CLI `29.5.3-1`, Compose `2.40.3`, and Buildx `0.34.1-1`. The feature supports the Docker CLI pin directly; exact Compose and Docker CE Buildx pins are reference values because the feature schema does not expose exact Docker CE package version options for them.
 - The DOD base image metadata should set `remoteUser: vscode` and `updateRemoteUserUID: true`.
 - The default local workflow should use the host Docker daemon image store, not an assumed local registry.
+- The default image and artifact target is `linux/amd64`. `scripts/env.sh` exports configured `DOCKER_PLATFORM` as `DOCKER_DEFAULT_PLATFORM` so ARM64 preparation hosts still pull, build, and run the x64 target consistently.
+- `DOCKER_PLATFORM` is the canonical single target and supports `linux/amd64` or `linux/arm64`. The shared environment helper derives the VS Code, toolchain, and Rust selectors, and target Docker operations must pass `--platform "${DOCKER_PLATFORM}"` explicitly.
+- The current `artifacts/` layout and local image tags are single-target. Require `./scripts/clean.sh`, prefetch, and rebuild before changing `DOCKER_PLATFORM`; concurrent multi-target caches require future platform-qualified artifact roots and image tags.
+- Rust prefetch must not execute a foreign-architecture `rustup-init` on the host. When host and target differ, it uses a target-platform Docker build/create/copy workflow.
+- WSL Windows client architecture is independent of the container target. `WSL_SERVER_PLATFORMS` defaults to the target server platform but may be overridden; setup selects the platform from the WSL artifact manifest rather than hard-coding x64.
 - Registry workflows are opt-in through `DOCKER_ENV_FILE`.
 - `REGISTRY` is treated as an image prefix, so it may include a namespace, registry host, or registry host plus path.
 - Optional local registry workflows should use a private ignored env file such as `docker.local.env` and run scripts with `DOCKER_ENV_FILE=docker.local.env`.
@@ -135,6 +142,13 @@ Current online preparation:
 ./scripts/build-all.sh
 ./scripts/test-all.sh
 ./scripts/package-artifacts.sh
+```
+
+Generated local state cleanup:
+
+```bash
+./scripts/clean.sh
+./scripts/clean.sh --docker-images
 ```
 
 Disconnected restore/build:
@@ -206,3 +220,9 @@ Current lessons:
 - 2026-06-17 - Decision: Default artifact packaging includes `base-dod`, `base-vscode`, and `base-toolchain` image refs so disconnected restore has the composed image available.
 - 2026-06-17 - Decision: The default Docker config filename is `config/docker.env`; `scripts/env.sh` should resolve that file when `DOCKER_ENV_FILE` is not set.
 - 2026-06-17 - Decision: README quick start should lead with online prefetch/build/test/package, then offline build verification, then disconnected environment setup including WSL payload purpose and `ssh-add` expectations.
+- 2026-09-04 - Finding: On an ARM64 Docker host, an unqualified build produced an ARM64 `base-dod` image but installed the configured x64 VS Code Server, which failed because `/lib64/ld-linux-x86-64.so.2` was unavailable.
+- 2026-09-04 - Decision: Track `DOCKER_PLATFORM=linux/amd64` and export it centrally as `DOCKER_DEFAULT_PLATFORM` so Docker operations match the repository's x64 VS Code, WSL, APT, and toolchain artifacts.
+- 2026-09-04 - Decision: `scripts/clean.sh` removes repository-generated files by default; Docker image removal is opt-in and never force-removes an image that Docker reports as in use.
+- 2026-09-04 - Finding: npm's vulnerability-audit bulk endpoint timed out in the current environment after the resolver package had already downloaded; WSL prefetch now uses locked `npm ci --no-audit --no-fund` when it must restore `node_modules`.
+- 2026-09-04 - Decision: `DOCKER_PLATFORM` now derives all architecture-specific selectors, Docker target operations use explicit platform flags, and target-specific Rust prefetch runs inside Docker when the host architecture differs.
+- 2026-09-04 - Finding: On the observed ARM64 Docker Desktop image store, `docker pull --platform linux/amd64` retained the host-native variant. The upstream-image step therefore materializes the requested variant with an explicit-platform Docker build before verifying it.
