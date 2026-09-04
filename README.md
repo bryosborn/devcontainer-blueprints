@@ -132,6 +132,11 @@ also pass the platform explicitly. The supported targets are `linux/amd64` and
 `linux/arm64`; the default is AMD64, so an ARM64 online preparation machine
 uses Docker emulation to create AMD64 images.
 
+The bootstrap `.devcontainer` uses the multi-architecture
+`mcr.microsoft.com/devcontainers/base:3.0.3-ubuntu22.04` image so it runs
+natively on both AMD64 and ARM64 hosts. This is separate from the project image
+and artifact target controlled by `DOCKER_PLATFORM`.
+
 The current artifact layout is intentionally single-target. Before changing
 `DOCKER_PLATFORM`, clear generated state and regenerate it for the new target:
 
