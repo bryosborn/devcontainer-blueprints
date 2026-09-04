@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "prefetch:vscode-extensions": "node src/base-vscode/scripts/prefetch-extensions.mjs",
-    "test:vscode-extensions": "node src/base-vscode/scripts/test-extension-resolver.mjs"
+    "test:vscode-extensions": "node src/base-vscode/scripts/test-extension-resolver.mjs",
+    "test:wolfi-config": "node scripts/wolfi/test-config.mjs"
   },
   "dependencies": {
-    "semver": "^7.7.2"
+    "semver": "^7.7.2",
+    "yaml": "2.9.0"
   },
   "devDependencies": {}
 }

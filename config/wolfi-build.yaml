@@ -1,0 +1,73 @@
+schemaVersion: 1
+
+images:
+  prefix: devcontainers
+  version: "0.1.0"
+  platform: linux/amd64
+  names:
+    dod: wolfi-base-dod
+    vscode: wolfi-base-vscode
+    toolchain: wolfi-base-toolchain
+
+artifacts:
+  root: artifacts/wolfi
+
+wolfi:
+  baseImage: cgr.dev/chainguard/wolfi-base:latest
+  repositories:
+    main: https://apk.cgr.dev/chainguard
+    extra: https://apk.cgr.dev/extra-packages
+
+user:
+  name: vscode
+  uid: 1000
+  gid: 1000
+
+docker:
+  cli: latest
+  buildx: latest
+  compose: latest
+
+vscode:
+  version: "1.136.1"
+  quality: stable
+  extensions:
+    - SonarSource.sonarlint-vscode
+    - rust-lang.rust-analyzer
+    - dbaeumer.vscode-eslint
+    - esbenp.prettier-vscode
+    - ms-azuretools.vscode-docker
+    - redhat.vscode-xml
+    - redhat.vscode-yaml
+    - ms-vscode.cpptools
+    - emeraldwalk.RunOnSave
+    - ms-python.python
+    - ms-toolsai.jupyter
+    - vscjava.vscode-java-pack
+    - ms-vscode-remote.vscode-remote-extensionpack
+    - AykutSarac.jsoncrack-vscode
+    - humao.rest-client
+
+toolchain:
+  build:
+    clang: latest
+  python:
+    - "3.12"
+    - "3.13"
+  java: "26"
+  maven: "3.9"
+  node: "24"
+  npm: "12"
+  clamav: "1.5"
+  kubectl: "1.37.0"
+  yq: "4"
+  helm: "4"
+  oras: "1"
+  mongosh: "2"
+  mongodbDatabaseTools: "100"
+  rust:
+    toolchain: nightly-2026-09-04
+    components:
+      - rust-src
+      - rustfmt
+      - clippy
