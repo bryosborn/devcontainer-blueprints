@@ -33,6 +33,7 @@ Run this on the machine that has internet access. It downloads all external arti
 ./scripts/prefetch-all.sh
 ./scripts/build-all.sh
 ./scripts/test-all.sh
+./scripts/scan-images-trivy.sh
 ./scripts/package-artifacts.sh
 ```
 
@@ -88,6 +89,18 @@ The module-level scripts are available when you want to work on one layer at a t
 ```
 
 That script saves `ARTIFACT_IMAGE_REFS` to `artifacts/docker-images/`, writes portable SHA256 files and `artifacts/manifest.json`, and creates `artifacts-<toolchain-name>-<version>.tar.gz` at the repo root.
+
+To scan every configured project image in the host Docker image store and
+generate a CycloneDX SBOM for each image:
+
+```bash
+./scripts/scan-images-trivy.sh
+```
+
+This requires `trivy` and writes JSON vulnerability reports, CycloneDX JSON
+SBOMs, and `vulnerability-summary.tsv` under `artifacts/trivy-output/`. The
+script checks all images in `ARTIFACT_IMAGE_REFS` locally before scanning and
+does not pull a missing image from a registry.
 
 To remove generated artifacts, temporary build workspaces, resolver dependencies, and packaged artifact bundles:
 

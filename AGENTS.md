@@ -48,6 +48,7 @@ Docker platform:     linux/amd64
 - `scripts/prefetch-all.sh`: Online-machine wrapper for all artifact prefetch steps.
 - `scripts/build-all.sh`: Online-machine wrapper for the DOD, VS Code, and toolchain image builds.
 - `scripts/test-all.sh`: Wrapper for the current smoke/offline test suite.
+- `scripts/scan-images-trivy.sh`: Verifies configured project images exist in the host Docker image store, scans them with Trivy, and writes vulnerability reports and CycloneDX SBOMs under `artifacts/trivy-output/`.
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
 - `scripts/package-artifacts.sh`: Saves configured `ARTIFACT_IMAGE_REFS` into `artifacts/docker-images/`, writes `artifacts/manifest.json`, then creates a tar.gz bundle of the full `artifacts/` directory.
@@ -141,6 +142,7 @@ Current online preparation:
 ./scripts/prefetch-all.sh
 ./scripts/build-all.sh
 ./scripts/test-all.sh
+./scripts/scan-images-trivy.sh
 ./scripts/package-artifacts.sh
 ```
 
@@ -226,3 +228,4 @@ Current lessons:
 - 2026-09-04 - Finding: npm's vulnerability-audit bulk endpoint timed out in the current environment after the resolver package had already downloaded; WSL prefetch now uses locked `npm ci --no-audit --no-fund` when it must restore `node_modules`.
 - 2026-09-04 - Decision: `DOCKER_PLATFORM` now derives all architecture-specific selectors, Docker target operations use explicit platform flags, and target-specific Rust prefetch runs inside Docker when the host architecture differs.
 - 2026-09-04 - Finding: On the observed ARM64 Docker Desktop image store, `docker pull --platform linux/amd64` retained the host-native variant. The upstream-image step therefore materializes the requested variant with an explicit-platform Docker build before verifying it.
+- 2026-09-04 - Decision: Trivy scans use the configured `ARTIFACT_IMAGE_REFS` from the host Docker image store and write vulnerability JSON, CycloneDX JSON SBOMs, and a TSV summary under `artifacts/trivy-output/`.
