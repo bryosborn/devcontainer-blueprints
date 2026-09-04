@@ -50,6 +50,7 @@ Docker platform:     linux/amd64
 - `scripts/test-all.sh`: Wrapper for the current smoke/offline test suite.
 - `scripts/scan-images-trivy.sh`: Verifies configured project images exist in the host Docker image store, scans them with Trivy, and writes vulnerability reports, CycloneDX SBOMs, and a combined CSV under `artifacts/trivy-output/`.
 - `scripts/summarize-trivy-vulnerabilities.py`: Combines Trivy vulnerability JSON reports into a spreadsheet-compatible CSV with package and fix-version details.
+- `config/trivy-ignore.rego`: Suppresses Trivy vulnerability findings attributed to selected development-header packages without removing their SBOM components.
 - `scripts/pull-upstream-base-image.sh`: Pulls `UPSTREAM_BASE_IMAGE`.
 - `scripts/build-base-dod.sh`: Builds `BASE_IMAGE` with the DOD feature and `moby=false`.
 - `scripts/package-artifacts.sh`: Saves configured `ARTIFACT_IMAGE_REFS` into `artifacts/docker-images/`, writes `artifacts/manifest.json`, then creates a tar.gz bundle of the full `artifacts/` directory.
@@ -233,3 +234,4 @@ Current lessons:
 - 2026-09-04 - Decision: Trivy scans use the configured `ARTIFACT_IMAGE_REFS` from the host Docker image store and write vulnerability JSON, CycloneDX JSON SBOMs, and a TSV summary under `artifacts/trivy-output/`.
 - 2026-09-04 - Decision: The Trivy workflow also writes a deduplicated `vulnerabilities.csv` across all configured images so findings can be filtered by container, CVE, severity, affected package, and version/fix data.
 - 2026-09-04 - Decision: The combined Trivy CSV leads with container, CVE, a `YES--SEVERITY`/`NO--SEVERITY` triage field, UTC-relative vulnerability age, status, and remediation, followed by package, version, advisory, PURL, and layer details.
+- 2026-09-04 - Decision: Trivy vulnerability outputs suppress findings attributed to `linux-libc-dev` and `libc6-dev` through `config/trivy-ignore.rego`; this does not remove those packages and preserves them in SBOM component inventories.

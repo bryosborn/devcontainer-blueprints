@@ -51,6 +51,7 @@ for image_ref in "${image_refs[@]}"; do
   trivy image \
     --image-src docker \
     --scanners vuln \
+    --ignore-policy "${REPO_ROOT}/config/trivy-ignore.rego" \
     --format json \
     --output "${vulnerability_report}" \
     "${image_ref}"
@@ -59,6 +60,7 @@ for image_ref in "${image_refs[@]}"; do
   trivy image \
     --image-src docker \
     --scanners vuln \
+    --ignore-policy "${REPO_ROOT}/config/trivy-ignore.rego" \
     --format cyclonedx \
     --output "${sbom_report}" \
     "${image_ref}"

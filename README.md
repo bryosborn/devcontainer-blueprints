@@ -105,7 +105,10 @@ publication, status, remediation, scanner target, package class and ecosystem,
 package path, installed/fixed versions, CVSS score, advisory details, PURL, and
 image layer for each unique finding. The script checks all images in
 `ARTIFACT_IMAGE_REFS` locally before scanning and does not pull a missing image
-from a registry.
+from a registry. It applies `config/trivy-ignore.rego` to suppress findings
+attributed to the development-header packages `linux-libc-dev` and `libc6-dev`.
+This affects vulnerability reporting only: both packages remain visible in the
+SBOM inventory, and the policy does not remove them or remediate their CVEs.
 
 To remove generated artifacts, temporary build workspaces, resolver dependencies, and packaged artifact bundles:
 
