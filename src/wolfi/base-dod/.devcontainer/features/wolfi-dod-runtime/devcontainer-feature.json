@@ -1,0 +1,17 @@
+{
+  "id": "wolfi-dod-runtime",
+  "version": "1.0.0",
+  "name": "Wolfi Docker-outside-of-Docker runtime",
+  "description": "Mount the host Docker socket and expose it through an identity-owned socat proxy. This Feature installs no packages.",
+  "entrypoint": "/usr/local/share/wolfi-dod/docker-socket-proxy-entrypoint.sh",
+  "mounts": [
+    {
+      "source": "/var/run/docker.sock",
+      "target": "/var/run/docker-host.sock",
+      "type": "bind"
+    }
+  ],
+  "securityOpt": [
+    "label=disable"
+  ]
+}

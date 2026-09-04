@@ -1,0 +1,27 @@
+{
+  "name": "Wolfi Docker Outside of Docker",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "BASE_IMAGE": "cgr.dev/chainguard/wolfi-base:latest",
+      "REMOTE_USER": "vscode",
+      "REMOTE_UID": "1000",
+      "REMOTE_GID": "1000",
+      "WOLFI_APK_REPOSITORY_SUBDIR": "repositories/main",
+      "WOLFI_DOD_APK_PACKAGES": "bash ca-certificates coreutils docker-cli docker-cli-buildx docker-compose posix-libc-utils shadow socat sudo"
+    },
+    "options": [
+      "--network=none",
+      "--build-context",
+      "wolfi_apks=${localWorkspaceFolder}/../../../artifacts/wolfi/linux-amd64/apk"
+    ]
+  },
+  "containerUser": "root",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "features": {
+    "./features/wolfi-dod-runtime": {}
+  }
+}
