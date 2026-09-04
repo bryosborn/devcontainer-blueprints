@@ -1,0 +1,15 @@
+{
+  "name": "Wolfi Base Toolchain",
+  "image": "devcontainers/wolfi-base-toolchain:0.1.0",
+  "containerUser": "root",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": false
+      }
+    }
+  }
+}
