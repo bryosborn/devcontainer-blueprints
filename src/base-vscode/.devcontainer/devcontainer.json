@@ -8,7 +8,8 @@
       "VSCODE_COMMIT": "${templateOption:vscodeCommit}",
       "VSCODE_QUALITY": "${templateOption:vscodeQuality}",
       "VSCODE_SERVER_PLATFORM": "${templateOption:vscodeServerPlatform}",
-      "VSCODE_REMOTE_USER": "vscode"
+      "VSCODE_REMOTE_USER": "vscode",
+      "VSCODE_EXTENSIONS_ARCHIVE_NAME": "vscode-extensions.tar.gz"
     }
   },
 

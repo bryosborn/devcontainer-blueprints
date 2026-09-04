@@ -9,11 +9,28 @@ source "${REPO_ROOT}/src/tool-artifacts/lib/toolchain-env.sh"
 
 load_env_file "${REPO_ROOT}"
 load_toolchain_env "${REPO_ROOT}"
+
+EXT_ENV_FILE="${REPO_ROOT}/config/vscode-extensions.env"
+if [[ ! -f "${EXT_ENV_FILE}" ]]; then
+  echo "ERROR: VS Code extension config file not found: ${EXT_ENV_FILE}" >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "${EXT_ENV_FILE}"
+
 require_env_vars \
   BASE_TOOLCHAIN_IMAGE \
   BASE_VSCODE_REMOTE_USER \
   NODE_VERSION \
-  HELM_VERSION
+  HELM_VERSION \
+  HELM_INSTALL \
+  ORAS_INSTALL \
+  MONGODB_DATABASE_TOOLS_INSTALL \
+  VSCODE_EXTENSIONS_ARCHIVE_NAME
+
+toolchain_normalize_bool_var HELM_INSTALL
+toolchain_normalize_bool_var ORAS_INSTALL
+toolchain_normalize_bool_var MONGODB_DATABASE_TOOLS_INSTALL
 
 if ! docker image inspect "${BASE_TOOLCHAIN_IMAGE}" >/dev/null 2>&1; then
   echo "ERROR: Base toolchain image is not available locally:"
@@ -95,6 +112,7 @@ docker run --rm \
   --network=none \
   --user root \
   -e "BASE_VSCODE_REMOTE_USER=${BASE_VSCODE_REMOTE_USER}" \
+  -e "VSCODE_EXTENSIONS_ARCHIVE_NAME=${VSCODE_EXTENSIONS_ARCHIVE_NAME}" \
   "${BASE_TOOLCHAIN_IMAGE}" \
   bash -lc '
     set -euo pipefail
@@ -102,9 +120,19 @@ docker run --rm \
     remote_home="$(getent passwd "${BASE_VSCODE_REMOTE_USER}" | cut -d: -f6)"
     code_server="$(find "${remote_home}/.vscode-server/cli/servers" -path "*/server/bin/code-server" -type f -executable | sort | tail -1)"
     extensions_dir="${remote_home}/.vscode-server/extensions"
+    extension_archive="${remote_home}/${VSCODE_EXTENSIONS_ARCHIVE_NAME}"
+    extension_installer="${remote_home}/install-vscode-extensions.sh"
 
     test -n "${code_server}"
-    test -d "${extensions_dir}"
+    test -f "${extension_archive}"
+    test -f "${extension_archive}.sha256"
+    test -x "${extension_installer}"
+    (cd "${remote_home}" && sha256sum --check --strict "${VSCODE_EXTENSIONS_ARCHIVE_NAME}.sha256")
+    "${extension_installer}" --verify-only
+    if [[ -d "${extensions_dir}" && -n "$(find "${extensions_dir}" -mindepth 1 -print -quit)" ]]; then
+      echo "ERROR: VS Code extensions were installed instead of remaining archived." >&2
+      exit 1
+    fi
     test "${JAVA_HOME}" = "/opt/java"
     test "${RUSTUP_HOME}" = "/usr/local/rustup"
     test "${CARGO_HOME}" = "/usr/local/cargo"
@@ -121,11 +149,6 @@ docker run --rm \
     test -x "$(readlink -f /usr/bin/yq)"
 
     "${code_server}" --version
-    "${code_server}" \
-      --extensions-dir "${extensions_dir}" \
-      --user-data-dir /tmp/vscode-server-user-data \
-      --list-extensions \
-      --show-versions
 
     docker --version
     docker compose version
@@ -147,22 +170,32 @@ run_image -e "EXPECTED_NODE_VERSION=${NODE_VERSION#v}" "${BASE_TOOLCHAIN_IMAGE}"
   'test "$(node --version)" = "v${EXPECTED_NODE_VERSION}"; node --version'
 run_image "${BASE_TOOLCHAIN_IMAGE}" npm --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" npx --version
-# The command string is evaluated inside the test container.
-# shellcheck disable=SC2016
-run_image -e "EXPECTED_HELM_VERSION=${HELM_VERSION#v}" "${BASE_TOOLCHAIN_IMAGE}" bash -lc \
-  'test "$(helm version --template "{{.Version}}")" = "v${EXPECTED_HELM_VERSION}"; helm version'
+if [[ "${HELM_INSTALL}" == "true" ]]; then
+  # The command string is evaluated inside the test container.
+  # shellcheck disable=SC2016
+  run_image -e "EXPECTED_HELM_VERSION=${HELM_VERSION#v}" "${BASE_TOOLCHAIN_IMAGE}" bash -lc \
+    'test "$(helm version --template "{{.Version}}")" = "v${EXPECTED_HELM_VERSION}"; helm version'
+else
+  run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc '! command -v helm >/dev/null 2>&1'
+fi
 run_image "${BASE_TOOLCHAIN_IMAGE}" kubectl version --client
-run_image "${BASE_TOOLCHAIN_IMAGE}" oras version
+if [[ "${ORAS_INSTALL}" == "true" ]]; then
+  run_image "${BASE_TOOLCHAIN_IMAGE}" oras version
+else
+  run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc '! command -v oras >/dev/null 2>&1'
+fi
 run_image "${BASE_TOOLCHAIN_IMAGE}" yq --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" mongosh --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongodump --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongorestore --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongoimport --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongoexport --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" bsondump --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongostat --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongotop --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" mongofiles --version
+for mongodb_binary in bsondump mongodump mongoexport mongofiles mongoimport mongorestore mongostat mongotop; do
+  if [[ "${MONGODB_DATABASE_TOOLS_INSTALL}" == "true" ]]; then
+    run_image "${BASE_TOOLCHAIN_IMAGE}" "${mongodb_binary}" --version
+  else
+    # MONGODB_BINARY is intentionally expanded inside the test container.
+    # shellcheck disable=SC2016
+    run_image -e "MONGODB_BINARY=${mongodb_binary}" "${BASE_TOOLCHAIN_IMAGE}" \
+      bash -lc '! command -v "${MONGODB_BINARY}" >/dev/null 2>&1'
+  fi
+done
 run_image "${BASE_TOOLCHAIN_IMAGE}" rustup --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" rustc --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" cargo --version
@@ -181,5 +214,6 @@ run_image "${BASE_TOOLCHAIN_IMAGE}" python3.12 -m venv --help >/dev/null
 run_image "${BASE_TOOLCHAIN_IMAGE}" python3.13 -m venv --help >/dev/null
 run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc 'set -euo pipefail; python3.12 -m venv /tmp/py312'
 run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc 'set -euo pipefail; python3.13 -m venv /tmp/py313'
+run_image "${BASE_TOOLCHAIN_IMAGE}" bash -lc '! command -v ffmpeg >/dev/null 2>&1'
 
 echo "Base toolchain image test completed successfully."

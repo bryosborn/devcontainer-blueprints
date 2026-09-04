@@ -10,7 +10,7 @@ Build a boring, minimal skeleton that proves this planned flow:
 local template
   -> upstream Dev Containers base image
   -> base-dod image with Docker-outside-of-Docker only
-  -> base-vscode image with a pinned VS Code Server payload
+  -> base-vscode image with a pinned VS Code Server and uninstalled VSIX archive
   -> usable scratch devcontainer
 ```
 
@@ -58,7 +58,7 @@ Docker platform:     linux/amd64
 - `scripts/load-artifacts.sh`: Disconnected-machine helper that verifies and `docker load`s bundled image tar files.
 - `scripts/setup-wsl-artifacts.ps1`: Windows host helper that verifies `artifacts/wsl/`, requires Windows `ssh-agent` to be running, adds every OpenSSH private key in `%USERPROFILE%\.ssh`, loads WSL Docker image artifacts, sets `dev.containers.bootstrapImage`, installs the VSIX files with `code`, and can invoke the WSL-side VS Code Server install.
 - `scripts/test-base-dod.sh`: Smoke tests the DOD base image.
-- `src/base-vscode/`: Dev Container Template that extends `BASE_IMAGE` and bakes a selected VS Code Server commit into `/home/vscode/.vscode-server/bin`.
+- `src/base-vscode/`: Dev Container Template that extends `BASE_IMAGE`, bakes a selected VS Code Server commit into `/home/vscode/.vscode-server/bin`, and carries the locked extension archive in `/home/vscode/`.
 - `src/base-vscode/scripts/`: VS Code Server artifact and `base-vscode` template build/test workflow.
 - `src/base-vscode/scripts/prefetch-server.sh`: Online step that resolves/downloads the configured VS Code Server archive into `artifacts/vscode-server/`.
 - `src/base-vscode/scripts/install-server.sh`: Offline install helper copied into Docker build contexts.
@@ -67,9 +67,10 @@ Docker platform:     linux/amd64
 - `src/base-vscode/scripts/test-server-install.sh`: Builds `test/Dockerfile.vscode-server` with `docker build --network=none`.
 - `src/base-vscode/scripts/prefetch-extensions.sh`: Online step that resolves/downloads VS Code extension VSIX artifacts into `artifacts/vscode-extensions/`.
 - `src/base-vscode/scripts/prefetch-extensions.mjs`: Marketplace resolver that checks VS Code version compatibility, target platform, dependencies, extension packs, extension kind, and hashes.
-- `src/base-vscode/scripts/install-extensions.sh`: Offline install helper that installs local VSIX files in lockfile order through the preinstalled VS Code Server CLI.
+- `src/base-vscode/scripts/package-extensions.sh`: Packages every locked server/client VSIX into a verified tar.gz without installing it.
+- `src/base-vscode/scripts/install-extensions.sh`: Self-contained user-invoked archive installer copied beside the archive; it installs server extensions and extracts client-only VSIX files for transfer, while image builds do not invoke it.
 - `src/base-vscode/scripts/test-extension-resolver.mjs`: Local resolver behavior tests for semver, extension kind, dependency/pack ordering, built-ins, and cycle detection.
-- `src/base-vscode/scripts/test-extensions-install.sh`: Builds `src/base-vscode/test/Dockerfile.extensions` with `docker build --network=none`.
+- `src/base-vscode/scripts/test-extensions-archive.sh`: Verifies the extension archive, internal checksums, and server/client payload counts.
 - `config/vscode-extensions.txt`: Initial VS Code extension source list.
 - `config/vscode-extensions.env`: Defaults for extension prefetch target platform, artifact root, server metadata, and remote user.
 - `config/wsl-artifacts.env`: Defaults for WSL bootstrap artifact prefetching.
@@ -81,9 +82,9 @@ Docker platform:     linux/amd64
 - `src/tool-artifacts/`: Modular toolchain artifact workflow. Current modules cover Java/Maven, Node, CLI tools, MongoDB client tools, and Rust.
 - `src/tool-artifacts/scripts/prefetch-all.sh`: Online step that downloads all current toolchain module artifacts into `artifacts/toolchain/`.
 - `src/tool-artifacts/scripts/test-all.sh`: Runs each current toolchain module's offline install test.
-- `src/base-toolchain/`: Composed image layer extending `BASE_VSCODE_IMAGE` with APT, toolchain, and VS Code extension artifacts installed offline.
+- `src/base-toolchain/`: Composed image layer extending `BASE_VSCODE_IMAGE` with selected APT and toolchain artifacts installed offline; it inherits but does not extract the VSIX archive.
 - `src/base-toolchain/scripts/build-image.sh`: Builds `BASE_TOOLCHAIN_IMAGE` with `docker build --network=none` and named BuildKit artifact contexts.
-- `src/base-toolchain/scripts/test-image.sh`: Smoke tests the composed image, including Python 3.12/3.13, Java/Maven, Node, CLI tools, VS Code Server/extensions, and DOD CLI-only behavior.
+- `src/base-toolchain/scripts/test-image.sh`: Smoke tests the composed image, including Python 3.12/3.13, Java/Maven, Node, selected CLI/MongoDB tools, the VS Code Server/uninstalled archive, and DOD CLI-only behavior.
 
 ## Design Rules
 
@@ -95,9 +96,9 @@ Docker platform:     linux/amd64
 - `BASE_VSCODE_VERSION` is the normal user-facing selector. `BASE_VSCODE_COMMIT` is optional and should be left empty unless an exact VS Code client commit override is needed.
 - VS Code Server downloads happen only in `src/base-vscode/scripts/prefetch-server.sh`; the template Dockerfile and test Dockerfile should install from `artifacts/vscode-server/` and must not run `curl`.
 - Install both known VS Code Server layouts: `~/.vscode-server/cli/servers/Stable-<commit>/server` and `~/.vscode-server/bin/<commit>`, with the legacy `<commit>/0` marker.
-- VS Code extension downloads happen only in `src/base-vscode/scripts/prefetch-extensions.sh` / `.mjs`; Docker builds should install from local VSIX artifacts and lockfiles only.
+- VS Code extension downloads happen only in `src/base-vscode/scripts/prefetch-extensions.sh` / `.mjs`; prefetch packages all locked server/client VSIX files, and image builds copy the verified archive to the remote user's home without extracting or installing it.
 - VS Code extension lockfiles should record exact versions, target platform, SHA256, install order, extension kind classification, host-only extensions, built-in dependencies, and warnings.
-- UI-only VS Code extensions should not be installed in the container by default; record them as host-only in the lockfile.
+- No VS Code extensions are installed in the images. Workspace-capable extensions are archived under `server/`, and UI-only/host-only extensions are archived under `client/`.
 - WSL bootstrap artifacts should live under `artifacts/wsl/` and be verified by `src/wsl-artifacts/scripts/test-artifacts.sh`; they are transfer payloads, not Linux container image-installed files.
 - The Dev Containers bootstrap container image used by `Clone Repository in Container Volume` is extension-owned: for `ms-vscode-remote.remote-containers` 0.461.0 it builds `vsc-volume-bootstrap` from the VSIX's `extension/scripts/bootstrap.Dockerfile`, based on `mcr.microsoft.com/devcontainers/base:0-alpine-3.20`. Prefetch should save that Docker image tar and setup should load it, verify the saved versioned tag exists locally, set `dev.containers.bootstrapImage` to that tag, and set `dev.containers.bootstrapImagePull=false`.
 - Keep the WSL setup entry point in top-level `scripts/` so a disconnected Windows host has one obvious setup script after unpacking the repo and artifacts.
@@ -107,7 +108,8 @@ Docker platform:     linux/amd64
 - Repo-controlled toolchain installs should receive the configured exact version so cached artifacts from other releases or major lines cannot silently override `config/toolchain.env`.
 - Toolchain modules should remain split by install shape under `src/tool-artifacts/`. Docker build tests should use BuildKit bind mounts for `artifacts/toolchain/` so raw downloaded archives do not become image layers.
 - `base-toolchain` composes existing artifact workflows; keep source install helpers modular and bring artifacts in with named BuildKit contexts instead of copying raw caches into the build workspace.
-- `base-toolchain` installs APT, Python pip, Java/Maven, Node, CLI tools, MongoDB tools, Rust, and VS Code extensions in separate Dockerfile layers. Keep `BASE_TOOLCHAIN_INSTALL_*` build args/env defaults wired through `config/docker.env` and `src/base-toolchain/scripts/build-image.sh`.
+- `base-toolchain` installs APT, Python pip, Java/Maven, Node, CLI tools, MongoDB tools, and Rust in separate Dockerfile layers. Keep `BASE_TOOLCHAIN_INSTALL_*` build args/env defaults wired through `config/docker.env` and `src/base-toolchain/scripts/build-image.sh`.
+- Keep Helm, ORAS, and MongoDB Database Tools versioned but individually optional through adjacent `HELM_INSTALL`, `ORAS_INSTALL`, and `MONGODB_DATABASE_TOOLS_INSTALL` values in `config/toolchain.env`; disabled artifacts are pruned during prefetch.
 - Dockerfiles should use the built-in BuildKit Dockerfile frontend unless there is a specific need for an external syntax image. Adding `# syntax=docker/dockerfile:...` makes disconnected builds resolve that image before any `--network=none` build step starts, so package/load that frontend image if one is ever reintroduced.
 - Python 3.12/3.13 come from the APT artifact layer as `python3.12-full` and `python3.13-full`. The composed image unpacks bundled pip wheels into global dist-packages and exposes `python3.12 -m pip`, `python3.13 -m pip`, `pip3.12`, and `pip3.13`.
 - The Docker-outside-of-Docker feature should use `moby=false`.
@@ -247,3 +249,8 @@ Current lessons:
 - 2026-09-04 - Finding: Replacing Node 26.8.1/Helm 4.2.4 with Node 24.20.0/Helm 3.21.4 left the Trivy severity counts unchanged at 38 unknown, 154 low, 705 medium, 165 high, and 15 critical. Helm 3.21.4 embeds the same vulnerable `golang.org/x/crypto` 0.54.0 as the prior Helm release, while the installed Node runtime itself contributes no separately detected findings; the `Node.js` findings are dependencies installed with VS Code extensions.
 - 2026-09-04 - Decision: Pin Docker CE CLI 29.8.0 while retaining the current Buildx 0.37.0 plugin; the DOD smoke test verifies the configured Docker CLI version exactly.
 - 2026-09-04 - Finding: Updating Docker CLI from 29.5.3 to 29.8.0 removed all 10 findings attributed to `usr/bin/docker` (nine high and one medium). The resulting Trivy totals are 203/203/1067 for base-dod/base-vscode/base-toolchain; Buildx 0.37.0 still contributes eight findings, including three high findings, because no newer stable Buildx package was available.
+- 2026-09-04 - Decision: Remove `ffmpeg` from the explicit APT roots; retain Helm 3.x, ORAS, and MongoDB Database Tools version knobs but default their adjacent install flags to false while keeping kubectl, yq, and mongosh.
+- 2026-09-04 - Decision: `base-vscode` installs the configured VS Code Server but stores every locked server/client VSIX in `/home/vscode/vscode-extensions.tar.gz`; neither image extracts or installs extensions during the build.
+- 2026-09-04 - Finding: Removing `ffmpeg`, Helm, ORAS, MongoDB Database Tools, and installed VS Code extensions reduced `base-toolchain` Trivy findings from 1067 to 263, including critical findings from 15 to 0 and high findings from 156 to 9; `base-dod` and `base-vscode` remained at 203 findings each.
+- 2026-09-04 - Decision: `config/toolchain.env` is the sole source of defaults for the granular Helm, ORAS, and MongoDB Database Tools install flags; production and test Dockerfiles declare those build args without fallback values.
+- 2026-09-04 - Decision: Copy `install-vscode-extensions.sh` beside the VSIX archive in `/home/vscode`; user invocation verifies the archive, installs server extensions, extracts client-only VSIX files for transfer, and leaves image builds extension-free.

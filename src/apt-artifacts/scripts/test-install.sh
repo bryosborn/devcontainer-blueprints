@@ -43,6 +43,7 @@ docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc '
   clang --version
   python3.12 --version
   python3.13 --version
+  ! command -v ffmpeg >/dev/null 2>&1
 '
 
 echo "APT artifact install test completed successfully."

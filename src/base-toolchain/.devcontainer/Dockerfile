@@ -53,15 +53,19 @@ RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-ar
 
 ARG BASE_TOOLCHAIN_INSTALL_CLI_TOOLS=true
 ARG HELM_VERSION
+ARG HELM_INSTALL
 ARG KUBECTL_VERSION
 ARG ORAS_VERSION
+ARG ORAS_INSTALL
 ARG YQ_VERSION
 RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-artifacts,readonly \
     case "${BASE_TOOLCHAIN_INSTALL_CLI_TOOLS}" in \
       true) /usr/local/share/base-toolchain/scripts/install-cli-tools.sh \
         --artifact-root /opt/toolchain-artifacts/cli-tools \
+        --install-helm "${HELM_INSTALL}" \
         --helm-version "${HELM_VERSION}" \
         --kubectl-version "${KUBECTL_VERSION}" \
+        --install-oras "${ORAS_INSTALL}" \
         --oras-version "${ORAS_VERSION}" \
         --yq-version "${YQ_VERSION}" ;; \
       false) echo "Skipping CLI tools install." ;; \
@@ -69,10 +73,16 @@ RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-ar
     esac
 
 ARG BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS=true
+ARG MONGOSH_VERSION
+ARG MONGODB_DATABASE_TOOLS_VERSION
+ARG MONGODB_DATABASE_TOOLS_INSTALL
 RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-artifacts,readonly \
     case "${BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS}" in \
       true) /usr/local/share/base-toolchain/scripts/install-mongodb-tools.sh \
-        --artifact-root /opt/toolchain-artifacts/mongodb ;; \
+        --artifact-root /opt/toolchain-artifacts/mongodb \
+        --mongosh-version "${MONGOSH_VERSION}" \
+        --install-database-tools "${MONGODB_DATABASE_TOOLS_INSTALL}" \
+        --database-tools-version "${MONGODB_DATABASE_TOOLS_VERSION}" ;; \
       false) echo "Skipping MongoDB tools install." ;; \
       *) echo "ERROR: BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS must be true or false." >&2; exit 1 ;; \
     esac
@@ -84,16 +94,6 @@ RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-ar
         --artifact-root /opt/toolchain-artifacts/rust ;; \
       false) echo "Skipping Rust install." ;; \
       *) echo "ERROR: BASE_TOOLCHAIN_INSTALL_RUST must be true or false." >&2; exit 1 ;; \
-    esac
-
-ARG BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS=true
-RUN --mount=type=bind,from=vscode_extensions,source=.,target=/opt/vscode-extensions,readonly \
-    case "${BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS}" in \
-      true) /usr/local/share/base-toolchain/scripts/install-vscode-extensions.sh \
-        --lock /opt/vscode-extensions/vscode-extensions.lock.json \
-        --user "${VSCODE_REMOTE_USER}" ;; \
-      false) echo "Skipping VS Code extension install." ;; \
-      *) echo "ERROR: BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS must be true or false." >&2; exit 1 ;; \
     esac
 
 RUN rm -rf /usr/local/share/base-toolchain

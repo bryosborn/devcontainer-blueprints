@@ -2,7 +2,7 @@
   "id": "base-toolchain",
   "version": "0.2.0",
   "name": "Base Toolchain",
-  "description": "Extends base-vscode with offline-installed APT packages, language toolchains, CLI tools, and VS Code extensions.",
+  "description": "Extends base-vscode with offline-installed APT packages, language toolchains, and selected CLI tools; the inherited VSIX archive remains uninstalled.",
   "options": {
     "baseImage": {
       "type": "string",

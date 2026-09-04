@@ -768,13 +768,24 @@ async function main() {
   const lockfile = buildLockfile(resolver.options, records, resolver.warnings);
   const lockfilePath = path.join(artifactRootAbs, "vscode-extensions.lock.json");
   const currentPath = path.join(artifactRootAbs, `current-${quality}-${targetPlatform}.json`);
+  const archiveName = env.VSCODE_EXTENSIONS_ARCHIVE_NAME || "vscode-extensions.tar.gz";
+  const archivePath = path.join(artifactRootAbs, archiveName);
 
   fs.writeFileSync(lockfilePath, `${JSON.stringify(lockfile, null, 2)}\n`);
   fs.copyFileSync(lockfilePath, currentPath);
 
+  execFileSync("bash", [
+    path.join(root, "src/base-vscode/scripts/package-extensions.sh"),
+    "--lock",
+    lockfilePath,
+    "--output",
+    archivePath
+  ], { stdio: "inherit" });
+
   console.log("VS Code extension prefetch complete:");
   console.log(`  lockfile: ${lockfilePath}`);
   console.log(`  current:  ${currentPath}`);
+  console.log(`  archive:  ${archivePath}`);
   console.log(`  installable extensions: ${lockfile.containerInstallOrder.length}`);
   console.log(`  host-only extensions:   ${lockfile.hostOnlyExtensions.length}`);
 }

@@ -18,12 +18,6 @@ fi
 # shellcheck source=/dev/null
 source "${TOOLCHAIN_CONFIG_FILE}"
 
-EXT_ENV_FILE="${REPO_ROOT}/config/vscode-extensions.env"
-if [[ -f "${EXT_ENV_FILE}" ]]; then
-  # shellcheck source=/dev/null
-  source "${EXT_ENV_FILE}"
-fi
-
 require_env_vars \
   BASE_VSCODE_IMAGE \
   BASE_TOOLCHAIN_IMAGE \
@@ -34,9 +28,14 @@ require_env_vars \
   TOOLCHAIN_ARTIFACT_ROOT \
   NODE_VERSION \
   HELM_VERSION \
+  HELM_INSTALL \
   KUBECTL_VERSION \
   ORAS_VERSION \
-  YQ_VERSION
+  ORAS_INSTALL \
+  YQ_VERSION \
+  MONGOSH_VERSION \
+  MONGODB_DATABASE_TOOLS_VERSION \
+  MONGODB_DATABASE_TOOLS_INSTALL
 
 BASE_TOOLCHAIN_INSTALL_APT="${BASE_TOOLCHAIN_INSTALL_APT:-true}"
 BASE_TOOLCHAIN_INSTALL_PYTHON_PIP="${BASE_TOOLCHAIN_INSTALL_PYTHON_PIP:-true}"
@@ -45,7 +44,6 @@ BASE_TOOLCHAIN_INSTALL_NODE="${BASE_TOOLCHAIN_INSTALL_NODE:-true}"
 BASE_TOOLCHAIN_INSTALL_CLI_TOOLS="${BASE_TOOLCHAIN_INSTALL_CLI_TOOLS:-true}"
 BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS="${BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS:-true}"
 BASE_TOOLCHAIN_INSTALL_RUST="${BASE_TOOLCHAIN_INSTALL_RUST:-true}"
-BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS="${BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS:-true}"
 
 bool_vars=(
   BASE_TOOLCHAIN_INSTALL_APT
@@ -55,7 +53,9 @@ bool_vars=(
   BASE_TOOLCHAIN_INSTALL_CLI_TOOLS
   BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS
   BASE_TOOLCHAIN_INSTALL_RUST
-  BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS
+  HELM_INSTALL
+  ORAS_INSTALL
+  MONGODB_DATABASE_TOOLS_INSTALL
 )
 
 normalize_bool_var() {
@@ -100,18 +100,15 @@ WORKSPACE="${REPO_ROOT}/.tmp/${BASE_TOOLCHAIN_TEMPLATE_ID}-build-workspace"
 APT_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${APT_ARTIFACT_ROOT}")"
 APT_PACKAGES="$(toolchain_abs_path "${REPO_ROOT}" "${APT_PACKAGE_LIST}")"
 TOOLCHAIN_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${TOOLCHAIN_ARTIFACT_ROOT}")"
-EXTENSIONS_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${VSCODE_EXTENSIONS_ARTIFACT_ROOT:-artifacts/vscode-extensions}")"
 
 rm -rf "${WORKSPACE}"
 mkdir -p \
   "${WORKSPACE}/scripts" \
   "${WORKSPACE}/empty-contexts/apt" \
-  "${WORKSPACE}/empty-contexts/toolchain" \
-  "${WORKSPACE}/empty-contexts/vscode-extensions"
+  "${WORKSPACE}/empty-contexts/toolchain"
 
 APT_CONTEXT="${APT_ROOT}"
 TOOLCHAIN_CONTEXT="${TOOLCHAIN_ROOT}"
-EXTENSIONS_CONTEXT="${EXTENSIONS_ROOT}"
 
 if ! docker image inspect "${BASE_VSCODE_IMAGE}" >/dev/null 2>&1; then
   echo "ERROR: Base VS Code image is not available locally:"
@@ -167,17 +164,6 @@ else
   TOOLCHAIN_CONTEXT="${WORKSPACE}/empty-contexts/toolchain"
 fi
 
-if is_enabled BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS; then
-  if [[ ! -f "${EXTENSIONS_ROOT}/vscode-extensions.lock.json" ]]; then
-    echo "ERROR: VS Code extension lockfile not found:"
-    echo "  ${EXTENSIONS_ROOT}/vscode-extensions.lock.json"
-    echo "Run ./src/base-vscode/scripts/prefetch-extensions.sh first."
-    exit 1
-  fi
-else
-  EXTENSIONS_CONTEXT="${WORKSPACE}/empty-contexts/vscode-extensions"
-fi
-
 cp "${TEMPLATE_DIR}/.devcontainer/Dockerfile" "${WORKSPACE}/Dockerfile"
 cp "${APT_PACKAGES}" "${WORKSPACE}/apt-packages.txt"
 cp "${REPO_ROOT}/src/apt-artifacts/scripts/install.sh" "${WORKSPACE}/scripts/install-apt-artifacts.sh"
@@ -187,7 +173,6 @@ cp "${REPO_ROOT}/src/tool-artifacts/node/scripts/install.sh" "${WORKSPACE}/scrip
 cp "${REPO_ROOT}/src/tool-artifacts/cli-tools/scripts/install.sh" "${WORKSPACE}/scripts/install-cli-tools.sh"
 cp "${REPO_ROOT}/src/tool-artifacts/mongodb/scripts/install.sh" "${WORKSPACE}/scripts/install-mongodb-tools.sh"
 cp "${REPO_ROOT}/src/tool-artifacts/rust/scripts/install.sh" "${WORKSPACE}/scripts/install-rust.sh"
-cp "${REPO_ROOT}/src/base-vscode/scripts/install-extensions.sh" "${WORKSPACE}/scripts/install-vscode-extensions.sh"
 
 echo "Using config:"
 echo "  ${CONFIG_FILE}"
@@ -205,7 +190,6 @@ docker build \
   --network=none \
   --build-context "apt_artifacts=${APT_CONTEXT}" \
   --build-context "toolchain_artifacts=${TOOLCHAIN_CONTEXT}" \
-  --build-context "vscode_extensions=${EXTENSIONS_CONTEXT}" \
   --build-arg "BASE_IMAGE=${BASE_VSCODE_IMAGE}" \
   --build-arg "VSCODE_REMOTE_USER=${BASE_VSCODE_REMOTE_USER}" \
   --build-arg "BASE_TOOLCHAIN_INSTALL_APT=${BASE_TOOLCHAIN_INSTALL_APT}" \
@@ -215,12 +199,16 @@ docker build \
   --build-arg "NODE_VERSION=${NODE_VERSION}" \
   --build-arg "BASE_TOOLCHAIN_INSTALL_CLI_TOOLS=${BASE_TOOLCHAIN_INSTALL_CLI_TOOLS}" \
   --build-arg "HELM_VERSION=${HELM_VERSION}" \
+  --build-arg "HELM_INSTALL=${HELM_INSTALL}" \
   --build-arg "KUBECTL_VERSION=${KUBECTL_VERSION}" \
   --build-arg "ORAS_VERSION=${ORAS_VERSION}" \
+  --build-arg "ORAS_INSTALL=${ORAS_INSTALL}" \
   --build-arg "YQ_VERSION=${YQ_VERSION}" \
   --build-arg "BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS=${BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS}" \
+  --build-arg "MONGOSH_VERSION=${MONGOSH_VERSION}" \
+  --build-arg "MONGODB_DATABASE_TOOLS_VERSION=${MONGODB_DATABASE_TOOLS_VERSION}" \
+  --build-arg "MONGODB_DATABASE_TOOLS_INSTALL=${MONGODB_DATABASE_TOOLS_INSTALL}" \
   --build-arg "BASE_TOOLCHAIN_INSTALL_RUST=${BASE_TOOLCHAIN_INSTALL_RUST}" \
-  --build-arg "BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS=${BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS}" \
   -f "${WORKSPACE}/Dockerfile" \
   -t "${BASE_TOOLCHAIN_IMAGE}" \
   "${WORKSPACE}"

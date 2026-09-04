@@ -7,8 +7,8 @@ The current stack is:
 ```text
 mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04
   -> base-dod        Docker-outside-of-Docker CLI image
-  -> base-vscode     base-dod plus pinned VS Code Server
-  -> base-toolchain  base-vscode plus offline-installed tools and extensions
+  -> base-vscode     base-dod plus pinned VS Code Server and uninstalled VSIX archive
+  -> base-toolchain  base-vscode plus selected offline-installed tools
 ```
 
 ## Quick Start
@@ -200,17 +200,50 @@ updateRemoteUserUID=true
 /home/vscode/.vscode-server/bin/<commit>
 ```
 
+It also places every locked server and client extension in one archive without
+installing or extracting it:
+
+```text
+/home/vscode/vscode-extensions.tar.gz
+/home/vscode/vscode-extensions.tar.gz.sha256
+/home/vscode/install-vscode-extensions.sh
+```
+
+The image still starts with no installed extensions. From a connected remote
+terminal, the user can verify and install the server extensions explicitly:
+
+```bash
+~/install-vscode-extensions.sh --verify-only
+~/install-vscode-extensions.sh
+```
+
+The install command validates both checksum layers, installs the server VSIX
+set, and extracts client-only VSIX files to
+`~/vscode-client-extensions/<commit>/`. The remote container cannot modify the
+desktop VS Code installation; download that directory and run the desktop
+`code --install-extension <file.vsix> --force` command for those files. Reload
+the remote window after installing the server set.
+
 `base-toolchain` extends `BASE_VSCODE_IMAGE` and installs local artifacts only:
 
 ```text
 APT packages
 Java and Maven
 Node, npm, npx
-Helm, kubectl, ORAS, yq
-mongosh and MongoDB Database Tools
+kubectl and yq
+mongosh
 Rust nightly, rust-src, rustfmt, clippy
-VS Code extensions
 Python 3.12/3.13 with venv and pip entry points
+```
+
+`ffmpeg` is not an APT root. Helm, ORAS, and MongoDB Database Tools remain
+versioned but are excluded from prefetch and installation by default. Set their
+adjacent flags in `config/toolchain.env` to `true` to include them:
+
+```text
+HELM_INSTALL
+ORAS_INSTALL
+MONGODB_DATABASE_TOOLS_INSTALL
 ```
 
 The concrete tool versions in `config/toolchain.env` are refreshed deliberately;
@@ -235,14 +268,24 @@ VS Code extensions:
 
 ```bash
 ./src/base-vscode/scripts/prefetch-extensions.sh
-./src/base-vscode/scripts/test-extensions-install.sh
+./src/base-vscode/scripts/test-extensions-archive.sh
 ```
 
-The extension resolver reads `config/vscode-extensions.txt`, downloads compatible VSIX files, expands dependencies and extension packs, validates hashes, and writes:
+The extension resolver reads `config/vscode-extensions.txt`, downloads compatible
+VSIX files, expands dependencies and extension packs, validates hashes, and
+writes:
 
 ```text
 artifacts/vscode-extensions/vscode-extensions.lock.json
+artifacts/vscode-extensions/vscode-extensions.tar.gz
+artifacts/vscode-extensions/vscode-extensions.tar.gz.sha256
 ```
+
+The archive separates workspace-capable extensions under `server/` and
+host-only extensions under `client/`, and contains an internal `SHA256SUMS`.
+`base-vscode` copies this archive and an explicit installer into the `vscode`
+home directory; neither `base-vscode` nor `base-toolchain` installs extensions
+during the image build.
 
 WSL bootstrap artifacts:
 
@@ -303,9 +346,11 @@ Single-module entry points:
 ./src/tool-artifacts/rust/scripts/prefetch.sh
 ```
 
-Tool versions and hashes live in `config/toolchain.env`. Node currently tracks the
-latest 24.x release and Helm tracks the latest 3.x release. Empty hash fields are
-allowed while exploring; filled hashes are strict verification pins.
+Tool versions, include flags, and hashes live in `config/toolchain.env`. Node
+currently tracks the latest 24.x release. Helm remains pinned to the latest 3.x
+release but is disabled by default, as are ORAS and MongoDB Database Tools.
+Empty hash fields are allowed while exploring; filled hashes are strict
+verification pins.
 
 Rust prefetch runs the target `rustup-init` binary. If the online host and the
 selected target differ, the Rust script creates that cache in a target-platform
@@ -322,8 +367,11 @@ BASE_TOOLCHAIN_INSTALL_NODE
 BASE_TOOLCHAIN_INSTALL_CLI_TOOLS
 BASE_TOOLCHAIN_INSTALL_MONGODB_TOOLS
 BASE_TOOLCHAIN_INSTALL_RUST
-BASE_TOOLCHAIN_INSTALL_VSCODE_EXTENSIONS
 ```
+
+The broader CLI and MongoDB module switches control their whole layers. The
+three `*_INSTALL` flags in `config/toolchain.env` make Helm, ORAS, and MongoDB
+Database Tools individually optional while retaining kubectl, yq, and mongosh.
 
 ## Build Notes
 
@@ -334,10 +382,11 @@ The composed toolchain build uses named BuildKit contexts for:
 ```text
 artifacts/apt
 artifacts/toolchain
-artifacts/vscode-extensions
 ```
 
-Those directories are mounted during install steps. Raw downloaded archives are not copied into permanent image layers.
+Those directories are mounted during install steps. Raw downloaded toolchain
+archives are not copied into permanent image layers. The extension archive is
+intentionally copied into `base-vscode` as a disconnected payload.
 
 Dockerfiles intentionally use the built-in BuildKit Dockerfile frontend. Avoid adding `# syntax=docker/dockerfile:...` unless the matching frontend image is also packaged and loaded, because BuildKit resolves that image before the disconnected build starts.
 

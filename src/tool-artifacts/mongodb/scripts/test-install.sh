@@ -6,7 +6,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 source "${REPO_ROOT}/src/tool-artifacts/lib/toolchain-env.sh"
 
 load_toolchain_env "${REPO_ROOT}"
-toolchain_require_env_vars TOOLCHAIN_ARTIFACT_ROOT TOOLCHAIN_TEST_BASE_IMAGE
+toolchain_require_env_vars \
+  TOOLCHAIN_ARTIFACT_ROOT \
+  TOOLCHAIN_TEST_BASE_IMAGE \
+  MONGOSH_VERSION \
+  MONGODB_DATABASE_TOOLS_VERSION \
+  MONGODB_DATABASE_TOOLS_INSTALL
+
+toolchain_normalize_bool_var MONGODB_DATABASE_TOOLS_INSTALL
 
 ARTIFACT_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${TOOLCHAIN_ARTIFACT_ROOT}")"
 
@@ -25,20 +32,24 @@ docker build \
   --build-context "toolchain_artifacts=${ARTIFACT_ROOT}/mongodb" \
   -f "${REPO_ROOT}/src/tool-artifacts/mongodb/test/Dockerfile" \
   --build-arg "BASE_IMAGE=${TOOLCHAIN_TEST_BASE_IMAGE}" \
+  --build-arg "MONGOSH_VERSION=${MONGOSH_VERSION}" \
+  --build-arg "MONGODB_DATABASE_TOOLS_VERSION=${MONGODB_DATABASE_TOOLS_VERSION}" \
+  --build-arg "MONGODB_DATABASE_TOOLS_INSTALL=${MONGODB_DATABASE_TOOLS_INSTALL}" \
   -t "${IMAGE_TAG}" \
   "${REPO_ROOT}/src/tool-artifacts/mongodb"
 
-docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc '
+docker run --rm --platform "${DOCKER_PLATFORM}" \
+  -e "MONGODB_DATABASE_TOOLS_INSTALL=${MONGODB_DATABASE_TOOLS_INSTALL}" \
+  "${IMAGE_TAG}" bash -lc '
   set -euo pipefail
   mongosh --version
-  mongodump --version
-  mongorestore --version
-  mongoimport --version
-  mongoexport --version
-  bsondump --version
-  mongostat --version
-  mongotop --version
-  mongofiles --version
+  for binary in bsondump mongodump mongoexport mongofiles mongoimport mongorestore mongostat mongotop; do
+    if [[ "${MONGODB_DATABASE_TOOLS_INSTALL}" == "true" ]]; then
+      "${binary}" --version
+    else
+      ! command -v "${binary}" >/dev/null 2>&1
+    fi
+  done
 '
 
 echo "MongoDB tool offline install test completed successfully."

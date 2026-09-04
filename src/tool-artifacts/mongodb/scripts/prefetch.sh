@@ -11,7 +11,10 @@ toolchain_require_env_vars \
   TOOLCHAIN_ARCH \
   TOOLCHAIN_ARTIFACT_ROOT \
   MONGOSH_VERSION \
-  MONGODB_DATABASE_TOOLS_VERSION
+  MONGODB_DATABASE_TOOLS_VERSION \
+  MONGODB_DATABASE_TOOLS_INSTALL
+
+toolchain_normalize_bool_var MONGODB_DATABASE_TOOLS_INSTALL
 
 ARTIFACT_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${TOOLCHAIN_ARTIFACT_ROOT}")/mongodb"
 
@@ -73,12 +76,17 @@ fetch_tool \
   "mongosh-${MONGOSH_VERSION}-linux-${MONGOSH_ARCH}.tgz" \
   "${MONGOSH_SHA256:-}"
 
-fetch_tool \
-  "database-tools" \
-  "${MONGODB_DATABASE_TOOLS_VERSION}" \
-  "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-${DATABASE_TOOLS_ARCH}-${MONGODB_DATABASE_TOOLS_VERSION}.tgz" \
-  "mongodb-database-tools-ubuntu2204-${DATABASE_TOOLS_ARCH}-${MONGODB_DATABASE_TOOLS_VERSION}.tgz" \
-  "${MONGODB_DATABASE_TOOLS_SHA256:-}"
+if [[ "${MONGODB_DATABASE_TOOLS_INSTALL}" == "true" ]]; then
+  fetch_tool \
+    "database-tools" \
+    "${MONGODB_DATABASE_TOOLS_VERSION}" \
+    "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-${DATABASE_TOOLS_ARCH}-${MONGODB_DATABASE_TOOLS_VERSION}.tgz" \
+    "mongodb-database-tools-ubuntu2204-${DATABASE_TOOLS_ARCH}-${MONGODB_DATABASE_TOOLS_VERSION}.tgz" \
+    "${MONGODB_DATABASE_TOOLS_SHA256:-}"
+else
+  rm -rf "${ARTIFACT_ROOT}/database-tools"
+  echo "Skipping MongoDB Database Tools artifact because MONGODB_DATABASE_TOOLS_INSTALL=false."
+fi
 
 echo "MongoDB tool artifacts complete:"
 echo "  ${ARTIFACT_ROOT}"

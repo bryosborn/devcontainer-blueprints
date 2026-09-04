@@ -45,7 +45,6 @@ libxext6
 libxfixes3
 libxrandr2
 libxshmfence1
-ffmpeg
 libcairo-gobject2
 libdbus-glib-1-2
 libfontconfig1

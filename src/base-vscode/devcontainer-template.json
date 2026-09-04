@@ -2,7 +2,7 @@
   "id": "base-vscode",
   "version": "0.2.0",
   "name": "Base VS Code Server",
-  "description": "Build a dev container from the local DOD base image with a pinned VS Code Server payload baked in.",
+  "description": "Build a dev container from the local DOD base image with a pinned VS Code Server and an uninstalled server/client VSIX archive.",
   "documentationURL": "https://github.com/bryosborn/devcontainer-blueprints",
   "options": {
     "baseImage": {

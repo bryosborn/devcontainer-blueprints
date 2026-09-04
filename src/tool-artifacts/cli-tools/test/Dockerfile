@@ -6,15 +6,19 @@ USER root
 COPY scripts/install.sh /usr/local/bin/install-cli-tools.sh
 
 ARG HELM_VERSION
+ARG HELM_INSTALL
 ARG KUBECTL_VERSION
 ARG ORAS_VERSION
+ARG ORAS_INSTALL
 ARG YQ_VERSION
 RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-artifacts/cli-tools,readonly \
     chmod +x /usr/local/bin/install-cli-tools.sh \
     && /usr/local/bin/install-cli-tools.sh \
       --artifact-root /opt/toolchain-artifacts/cli-tools \
+      --install-helm "${HELM_INSTALL}" \
       --helm-version "${HELM_VERSION}" \
       --kubectl-version "${KUBECTL_VERSION}" \
+      --install-oras "${ORAS_INSTALL}" \
       --oras-version "${ORAS_VERSION}" \
       --yq-version "${YQ_VERSION}" \
     && rm -f /usr/local/bin/install-cli-tools.sh

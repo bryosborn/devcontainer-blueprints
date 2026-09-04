@@ -99,7 +99,7 @@ image_refs=(
 
 while IFS= read -r image_ref; do
   case "${image_ref}" in
-    vscode-server-preinstall-test:*|vscode-extension-preinstall-test:*)
+    vscode-server-preinstall-test:*)
       image_refs+=("${image_ref}")
       ;;
   esac

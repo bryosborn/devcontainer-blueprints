@@ -62,6 +62,26 @@ toolchain_require_env_vars() {
   fi
 }
 
+toolchain_normalize_bool_var() {
+  local var_name="$1"
+  local value="${!var_name:-}"
+
+  case "${value}" in
+    true|false)
+      ;;
+    1|yes|on)
+      printf -v "${var_name}" '%s' "true"
+      ;;
+    0|no|off)
+      printf -v "${var_name}" '%s' "false"
+      ;;
+    *)
+      echo "ERROR: ${var_name} must be true or false." >&2
+      exit 1
+      ;;
+  esac
+}
+
 download_artifact() {
   local url="$1"
   local output="$2"

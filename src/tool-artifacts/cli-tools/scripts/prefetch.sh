@@ -11,9 +11,14 @@ toolchain_require_env_vars \
   TOOLCHAIN_ARCH \
   TOOLCHAIN_ARTIFACT_ROOT \
   HELM_VERSION \
+  HELM_INSTALL \
   KUBECTL_VERSION \
   ORAS_VERSION \
+  ORAS_INSTALL \
   YQ_VERSION
+
+toolchain_normalize_bool_var HELM_INSTALL
+toolchain_normalize_bool_var ORAS_INSTALL
 
 ARTIFACT_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${TOOLCHAIN_ARTIFACT_ROOT}")/cli-tools"
 
@@ -63,13 +68,18 @@ fetch_tool() {
     "${hash_value}"
 }
 
-fetch_tool \
-  "helm" \
-  "${HELM_VERSION}" \
-  "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCHIVE_ARCH}.tar.gz" \
-  "helm-v${HELM_VERSION}-linux-${ARCHIVE_ARCH}.tar.gz" \
-  "sha256" \
-  "${HELM_SHA256:-}"
+if [[ "${HELM_INSTALL}" == "true" ]]; then
+  fetch_tool \
+    "helm" \
+    "${HELM_VERSION}" \
+    "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCHIVE_ARCH}.tar.gz" \
+    "helm-v${HELM_VERSION}-linux-${ARCHIVE_ARCH}.tar.gz" \
+    "sha256" \
+    "${HELM_SHA256:-}"
+else
+  rm -rf "${ARTIFACT_ROOT}/helm"
+  echo "Skipping Helm artifact because HELM_INSTALL=false."
+fi
 
 fetch_tool \
   "kubectl" \
@@ -79,13 +89,18 @@ fetch_tool \
   "sha512" \
   "${KUBECTL_SHA512:-}"
 
-fetch_tool \
-  "oras" \
-  "${ORAS_VERSION}" \
-  "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_${ARCHIVE_ARCH}.tar.gz" \
-  "oras_${ORAS_VERSION}_linux_${ARCHIVE_ARCH}.tar.gz" \
-  "sha256" \
-  "${ORAS_SHA256:-}"
+if [[ "${ORAS_INSTALL}" == "true" ]]; then
+  fetch_tool \
+    "oras" \
+    "${ORAS_VERSION}" \
+    "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_${ARCHIVE_ARCH}.tar.gz" \
+    "oras_${ORAS_VERSION}_linux_${ARCHIVE_ARCH}.tar.gz" \
+    "sha256" \
+    "${ORAS_SHA256:-}"
+else
+  rm -rf "${ARTIFACT_ROOT}/oras"
+  echo "Skipping ORAS artifact because ORAS_INSTALL=false."
+fi
 
 fetch_tool \
   "yq" \
