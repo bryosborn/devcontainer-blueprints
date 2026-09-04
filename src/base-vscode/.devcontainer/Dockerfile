@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=devcontainers/base-dod:0.1.0
+ARG BASE_IMAGE=devcontainers/base-dod:0.2.0
 FROM ${BASE_IMAGE}
 
 ARG VSCODE_COMMIT

@@ -5,7 +5,7 @@ Local-first Dev Container image and artifact workflows for rebuilding a reproduc
 The current stack is:
 
 ```text
-mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04
   -> base-dod        Docker-outside-of-Docker CLI image
   -> base-vscode     base-dod plus pinned VS Code Server
   -> base-toolchain  base-vscode plus offline-installed tools and extensions
@@ -40,8 +40,8 @@ Run this on the machine that has internet access. It downloads all external arti
 The package step creates:
 
 ```text
-artifacts-base-toolchain-0.1.0.tar.gz
-artifacts-base-toolchain-0.1.0.tar.gz.sha256
+artifacts-base-toolchain-0.2.0.tar.gz
+artifacts-base-toolchain-0.2.0.tar.gz.sha256
 ```
 
 ### 2. Offline Build Test
@@ -49,8 +49,8 @@ artifacts-base-toolchain-0.1.0.tar.gz.sha256
 Before moving into the fully disconnected workflow, test the packaged restore path on a machine or environment with Docker available and network access disabled for the image build/test steps. Copy the generated `.tar.gz` and `.sha256` files there, then run:
 
 ```bash
-sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
-tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
+sha256sum -c artifacts-base-toolchain-0.2.0.tar.gz.sha256
+tar -xzf artifacts-base-toolchain-0.2.0.tar.gz
 ./scripts/load-artifacts.sh
 ./src/base-toolchain/scripts/build-image.sh
 ./src/base-toolchain/scripts/test-image.sh
@@ -60,11 +60,11 @@ tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
 
 ### 3. Disconnected Environment
 
-Move the repo plus `artifacts-base-toolchain-0.1.0.tar.gz` and its `.sha256` file to the disconnected environment, then use the same restore commands:
+Move the repo plus `artifacts-base-toolchain-0.2.0.tar.gz` and its `.sha256` file to the disconnected environment, then use the same restore commands:
 
 ```bash
-sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
-tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
+sha256sum -c artifacts-base-toolchain-0.2.0.tar.gz.sha256
+tar -xzf artifacts-base-toolchain-0.2.0.tar.gz
 ./scripts/load-artifacts.sh
 ./src/base-toolchain/scripts/build-image.sh
 ./src/base-toolchain/scripts/test-image.sh
@@ -123,15 +123,22 @@ Use `./scripts/clean.sh --docker-images` to also remove the repository's built a
 Online image defaults live in `config/docker.env`; WSL artifact defaults live in `config/wsl-artifacts.env`:
 
 ```text
-UPSTREAM_BASE_IMAGE:  mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
+UPSTREAM_BASE_IMAGE:  mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04
 DOCKER_PLATFORM:      linux/amd64
-BASE_IMAGE:           devcontainers/base-dod:0.1.0
-BASE_VSCODE_IMAGE:    devcontainers/base-vscode:0.1.0
-BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
-BASE_VSCODE_VERSION:  1.124.2
-ARTIFACT_IMAGE_REFS:  devcontainers/base-dod:0.1.0 devcontainers/base-vscode:0.1.0 devcontainers/base-toolchain:0.1.0
+BASE_IMAGE:           devcontainers/base-dod:0.2.0
+BASE_VSCODE_IMAGE:    devcontainers/base-vscode:0.2.0
+BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.2.0
+BASE_VSCODE_VERSION:  1.136.1
+ARTIFACT_IMAGE_REFS:  devcontainers/base-dod:0.2.0 devcontainers/base-vscode:0.2.0 devcontainers/base-toolchain:0.2.0
 WSL_ARTIFACT_ROOT:    artifacts/wsl
 ```
+
+The default uses the mutable `3.0-ubuntu22.04` tag so online preparation follows
+the newest compatible 3.0.x base image. Rerun prefetch, build, test, and the
+Trivy scan to consume upstream updates. Because its digest can change without a
+Git configuration change, use a private `DOCKER_ENV_FILE` with a reviewed exact
+patch tag when deterministic online rebuilds are required. Packaged Docker
+image artifacts remain fixed for disconnected restores.
 
 `DOCKER_PLATFORM` is the canonical image and artifact target. The shared
 environment loader derives matching VS Code Server/extension, toolchain, and
@@ -168,14 +175,14 @@ DOCKER_ENV_FILE=.env ./src/base-vscode/scripts/prefetch-server.sh
 
 `base-dod` installs only Docker-outside-of-Docker on the upstream Microsoft base image. It disables Moby and keeps the Docker daemon out of the image.
 
-Pinned DOD-related values:
+DOD-related selections and observed versions:
 
 ```text
 ghcr.io/devcontainers/features/docker-outside-of-docker:1.10.0
-docker-ce-cli=29.5.3-1
-docker-compose=2.40.3
-docker-buildx-plugin=0.34.1-1
-compose-switch=1.0.5
+docker-ce-cli=29.8.0-1
+docker-compose=5.5.1 (selected through dockerDashComposeVersion=latest)
+docker-buildx-plugin=0.37.0-1
+compose-switch=disabled
 moby=false
 ```
 
@@ -205,6 +212,13 @@ Rust nightly, rust-src, rustfmt, clippy
 VS Code extensions
 Python 3.12/3.13 with venv and pip entry points
 ```
+
+The concrete tool versions in `config/toolchain.env` are refreshed deliberately;
+the offline installers select those exact versions even when artifacts for other
+versions or major lines remain in the local cache.
+An empty configured hash skips strict pin validation during online prefetch, but
+the prefetch scripts still calculate the downloaded artifact hash and store it
+in module metadata and `CHECKSUMS` for the disconnected workflow.
 
 ## Artifact Workflows
 
@@ -289,7 +303,9 @@ Single-module entry points:
 ./src/tool-artifacts/rust/scripts/prefetch.sh
 ```
 
-Tool versions and hashes live in `config/toolchain.env`. Empty hash fields are allowed while exploring; filled hashes are strict verification pins.
+Tool versions and hashes live in `config/toolchain.env`. Node currently tracks the
+latest 24.x release and Helm tracks the latest 3.x release. Empty hash fields are
+allowed while exploring; filled hashes are strict verification pins.
 
 Rust prefetch runs the target `rustup-init` binary. If the online host and the
 selected target differ, the Rust script creates that cache in a target-platform

@@ -29,12 +29,12 @@ Current concrete names:
 ```text
 REGISTRY:            devcontainers
 BASE_IMAGE_NAME:     base-dod
-BASE_IMAGE_VERSION:  0.1.0
-UPSTREAM_BASE_IMAGE: mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04
-BASE_IMAGE:          devcontainers/base-dod:0.1.0
-BASE_VSCODE_IMAGE:   devcontainers/base-vscode:0.1.0
-BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.1.0
-BASE_VSCODE_VERSION: 1.124.2
+BASE_IMAGE_VERSION:  0.2.0
+UPSTREAM_BASE_IMAGE: mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04
+BASE_IMAGE:          devcontainers/base-dod:0.2.0
+BASE_VSCODE_IMAGE:   devcontainers/base-vscode:0.2.0
+BASE_TOOLCHAIN_IMAGE: devcontainers/base-toolchain:0.2.0
+BASE_VSCODE_VERSION: 1.136.1
 Default config:      config/docker.env
 Docker platform:     linux/amd64
 ```
@@ -89,7 +89,7 @@ Docker platform:     linux/amd64
 
 - Keep this first version minimal.
 - Do not add GitHub Actions, GHCR publishing, custom Dev Container Features, Docker-in-Docker, Compose services, language stacks, or enterprise registry plumbing yet.
-- The target base family is `mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04`.
+- The target base family is the rolling `mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04` tag.
 - `base-dod` is the built image containing only Docker-outside-of-Docker installed through the Dev Container Feature installer.
 - `base-vscode` is the first actual Dev Container Template boundary; it should reuse `BASE_IMAGE` and bake the configured VS Code Server commit.
 - `BASE_VSCODE_VERSION` is the normal user-facing selector. `BASE_VSCODE_COMMIT` is optional and should be left empty unless an exact VS Code client commit override is needed.
@@ -104,14 +104,15 @@ Docker platform:     linux/amd64
 - The final smoke test should run with `--network=none`.
 - APT artifacts should be saved under `artifacts/apt/` as `.deb` files plus `Packages`, `Packages.gz`, `SHA256SUMS`, and metadata. The install path should use a local `file:` apt repo and be tested with `docker build --network=none`.
 - Toolchain versions should live in `config/toolchain.env`. Hashes are optional while exploring, but filled-in hash values are strict verification pins.
+- Repo-controlled toolchain installs should receive the configured exact version so cached artifacts from other releases or major lines cannot silently override `config/toolchain.env`.
 - Toolchain modules should remain split by install shape under `src/tool-artifacts/`. Docker build tests should use BuildKit bind mounts for `artifacts/toolchain/` so raw downloaded archives do not become image layers.
 - `base-toolchain` composes existing artifact workflows; keep source install helpers modular and bring artifacts in with named BuildKit contexts instead of copying raw caches into the build workspace.
 - `base-toolchain` installs APT, Python pip, Java/Maven, Node, CLI tools, MongoDB tools, Rust, and VS Code extensions in separate Dockerfile layers. Keep `BASE_TOOLCHAIN_INSTALL_*` build args/env defaults wired through `config/docker.env` and `src/base-toolchain/scripts/build-image.sh`.
 - Dockerfiles should use the built-in BuildKit Dockerfile frontend unless there is a specific need for an external syntax image. Adding `# syntax=docker/dockerfile:...` makes disconnected builds resolve that image before any `--network=none` build step starts, so package/load that frontend image if one is ever reintroduced.
 - Python 3.12/3.13 come from the APT artifact layer as `python3.12-full` and `python3.13-full`. The composed image unpacks bundled pip wheels into global dist-packages and exposes `python3.12 -m pip`, `python3.13 -m pip`, `pip3.12`, and `pip3.13`.
 - The Docker-outside-of-Docker feature should use `moby=false`.
-- The final DOD image should include compose-switch pinned by `DOD_COMPOSE_SWITCH_VERSION`. The upstream Docker-outside-of-Docker feature installs compose-switch as `latest`, so keep `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false` and add the pinned switch in the build script's final image layer.
-- `config/docker.env` records the Docker runtime versions observed from the DOD feature when it installed latest packages: Docker CLI `29.5.3-1`, Compose `2.40.3`, and Buildx `0.34.1-1`. The feature supports the Docker CLI pin directly; exact Compose and Docker CE Buildx pins are reference values because the feature schema does not expose exact Docker CE package version options for them.
+- Keep compose-switch disabled with `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false`; `docker-compose` should be the current standalone Compose binary installed by the DOD feature, without a separately downloaded compatibility switch.
+- `config/docker.env` records the Docker runtime versions observed or selected from the DOD feature: Docker CLI `29.8.0-1`, Compose `5.5.1`, and Buildx `0.37.0-1`. Compose uses the feature's rolling `latest` selector; the exact Compose and Docker CE Buildx values are reference values because the feature schema does not expose exact Docker CE package version options for them.
 - The DOD base image metadata should set `remoteUser: vscode` and `updateRemoteUserUID: true`.
 - The default local workflow should use the host Docker daemon image store, not an assumed local registry.
 - The default image and artifact target is `linux/amd64`. `scripts/env.sh` exports configured `DOCKER_PLATFORM` as `DOCKER_DEFAULT_PLATFORM` so ARM64 preparation hosts still pull, build, and run the x64 target consistently.
@@ -158,8 +159,8 @@ Generated local state cleanup:
 Disconnected restore/build:
 
 ```bash
-sha256sum -c artifacts-base-toolchain-0.1.0.tar.gz.sha256
-tar -xzf artifacts-base-toolchain-0.1.0.tar.gz
+sha256sum -c artifacts-base-toolchain-0.2.0.tar.gz.sha256
+tar -xzf artifacts-base-toolchain-0.2.0.tar.gz
 ./scripts/load-artifacts.sh
 ./src/base-toolchain/scripts/build-image.sh
 ./src/base-toolchain/scripts/test-image.sh
@@ -235,3 +236,14 @@ Current lessons:
 - 2026-09-04 - Decision: The Trivy workflow also writes a deduplicated `vulnerabilities.csv` across all configured images so findings can be filtered by container, CVE, severity, affected package, and version/fix data.
 - 2026-09-04 - Decision: The combined Trivy CSV leads with container, CVE, a `YES--SEVERITY`/`NO--SEVERITY` triage field, UTC-relative vulnerability age, status, and remediation, followed by package, version, advisory, PURL, and layer details.
 - 2026-09-04 - Decision: Trivy vulnerability outputs suppress findings attributed to `linux-libc-dev` and `libc6-dev` through `config/trivy-ignore.rego`; this does not remove those packages and preserves them in SBOM component inventories.
+- 2026-09-04 - Decision: Project builds use the mutable `mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04` tag to receive the newest compatible 3.0.x image during online preparation; use an exact patch tag through `DOCKER_ENV_FILE` when deterministic online rebuilds are required.
+- 2026-09-04 - Finding: The rolling-base rebuild installed Docker Buildx `0.37.0` (`docker-buildx-plugin` package `0.37.0-1`); its config value is an observed reference because the DOD feature installs the latest available Buildx package.
+- 2026-09-04 - Finding: `DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH=false` disabled the feature's switch installation, but `scripts/build-base-dod.sh` independently added compose-switch 1.0.5 in a final layer; that custom layer was removed for the 0.2.0 images.
+- 2026-09-04 - Decision: The 0.2.0 DOD image selects Docker Compose `latest` and leaves compose-switch disabled so both `docker compose` and the standalone `docker-compose` use the maintained Compose binary.
+- 2026-09-04 - Decision: Repo-controlled Node and CLI-tool builds pass the exact configured versions to their offline installers; multiple cached releases can coexist without the highest cached version overriding `config/toolchain.env`. Empty configured hashes skip the optional online pin check while prefetch still records actual hashes for offline verification.
+- 2026-09-04 - Finding: The rebuilt 0.2.0 images reported 213/213/1077 Trivy findings for base-dod/base-vscode/base-toolchain, down from 612/674/2208 in 0.1.0; base-dod and base-vscode have no critical findings, while base-toolchain has 15 occurrences representing five unique critical CVEs.
+- 2026-09-04 - Finding: The remaining base-toolchain criticals are fixable dependencies embedded in vendor artifacts: `golang.org/x/crypto` in Helm 4.2.4, ORAS 1.3.4, and MongoDB Database Tools 100.18.0, plus four npm findings introduced by the VS Code extension install layer. They require refreshed vendor releases or intentionally rebuilding/removing those artifacts rather than an APT upgrade.
+- 2026-09-04 - Decision: Node tracks the latest 24.x release (24.20.0) and Helm tracks the latest 3.x release (3.21.4) rather than automatically crossing major-version boundaries.
+- 2026-09-04 - Finding: Replacing Node 26.8.1/Helm 4.2.4 with Node 24.20.0/Helm 3.21.4 left the Trivy severity counts unchanged at 38 unknown, 154 low, 705 medium, 165 high, and 15 critical. Helm 3.21.4 embeds the same vulnerable `golang.org/x/crypto` 0.54.0 as the prior Helm release, while the installed Node runtime itself contributes no separately detected findings; the `Node.js` findings are dependencies installed with VS Code extensions.
+- 2026-09-04 - Decision: Pin Docker CE CLI 29.8.0 while retaining the current Buildx 0.37.0 plugin; the DOD smoke test verifies the configured Docker CLI version exactly.
+- 2026-09-04 - Finding: Updating Docker CLI from 29.5.3 to 29.8.0 removed all 10 findings attributed to `usr/bin/docker` (nine high and one medium). The resulting Trivy totals are 203/203/1067 for base-dod/base-vscode/base-toolchain; Buildx 0.37.0 still contributes eight findings, including three high findings, because no newer stable Buildx package was available.

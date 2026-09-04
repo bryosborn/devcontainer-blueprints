@@ -22,7 +22,7 @@ function usage() {
   prefetch.mjs [options]
 
 Options:
-  --version VERSION             VS Code product version, e.g. 1.124.2 or latest.
+  --version VERSION             VS Code product version, e.g. 1.136.1 or latest.
   --commit COMMIT               Exact VS Code commit SHA. Skips product-version lookup.
   --quality QUALITY             VS Code quality. Default comes from WSL_VSCODE_QUALITY.
   --client-platform PLATFORM    VS Code client update platform.

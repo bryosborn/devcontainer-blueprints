@@ -20,11 +20,9 @@ require_env_vars \
   DOD_FEATURE_DOCKER_DASH_COMPOSE_VERSION \
   DOD_FEATURE_INSTALL_DOCKER_BUILDX \
   DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH \
-  DOD_COMPOSE_SWITCH_VERSION \
   DOD_FEATURE_ENABLE_NONROOT_DOCKER
 
 WORKSPACE="${REPO_ROOT}/.tmp/${BASE_IMAGE_NAME}-build-workspace"
-FEATURE_IMAGE="devcontainer-blueprints/${BASE_IMAGE_NAME}-feature:${BASE_IMAGE_VERSION}"
 
 if ! docker image inspect "${UPSTREAM_BASE_IMAGE}" >/dev/null 2>&1; then
   echo "ERROR: Upstream base image is not available locally:"
@@ -87,53 +85,14 @@ echo "Reference Docker Buildx pin:"
 echo "  ${DOD_DOCKER_BUILDX_VERSION}"
 echo "Feature compose switch install:"
 echo "  ${DOD_FEATURE_INSTALL_DOCKER_COMPOSE_SWITCH}"
-echo "Pinned compose switch:"
-echo "  ${DOD_COMPOSE_SWITCH_VERSION}"
 
 build_args=(
   --workspace-folder "${WORKSPACE}"
-  --image-name "${FEATURE_IMAGE}"
+  --image-name "${BASE_IMAGE}"
   --platform "${DOCKER_PLATFORM}"
 )
 
 devcontainer build "${build_args[@]}"
-assert_local_image_platform "${FEATURE_IMAGE}"
-
-{
-  printf 'FROM %s\n\n' "${FEATURE_IMAGE}"
-  cat <<'EOF'
-ARG COMPOSE_SWITCH_VERSION
-
-USER root
-
-RUN set -eux; \
-    architecture="$(dpkg --print-architecture)"; \
-    case "${architecture}" in \
-      amd64|arm64) ;; \
-      *) echo "Unsupported architecture for compose-switch: ${architecture}" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/docker/compose-switch/releases/download/v${COMPOSE_SWITCH_VERSION}/docker-compose-linux-${architecture}" \
-      -o /usr/local/bin/compose-switch; \
-    chmod +x /usr/local/bin/compose-switch; \
-    if [ -e /usr/local/bin/docker-compose ] && [ ! -e /usr/local/bin/docker-compose-v1 ]; then \
-      mv /usr/local/bin/docker-compose /usr/local/bin/docker-compose-v1; \
-    fi; \
-    update-alternatives --install /usr/local/bin/docker-compose docker-compose /usr/local/bin/compose-switch 99; \
-    if [ -e /usr/local/bin/docker-compose-v1 ]; then \
-      update-alternatives --install /usr/local/bin/docker-compose docker-compose /usr/local/bin/docker-compose-v1 1; \
-    fi; \
-    update-alternatives --set docker-compose /usr/local/bin/compose-switch; \
-    compose-switch --version
-EOF
-} > "${WORKSPACE}/Dockerfile.compose-switch"
-
-docker build \
-  --platform "${DOCKER_PLATFORM}" \
-  --build-arg "COMPOSE_SWITCH_VERSION=${DOD_COMPOSE_SWITCH_VERSION}" \
-  --tag "${BASE_IMAGE}" \
-  --file "${WORKSPACE}/Dockerfile.compose-switch" \
-  "${WORKSPACE}"
-
 assert_local_image_platform "${BASE_IMAGE}"
 
 if image_has_registry "${BASE_IMAGE}"; then

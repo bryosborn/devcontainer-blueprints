@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=devcontainers/base-vscode:0.1.0
+ARG BASE_IMAGE=devcontainers/base-vscode:0.2.0
 FROM ${BASE_IMAGE}
 
 ARG VSCODE_REMOTE_USER=vscode
@@ -41,19 +41,29 @@ RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-ar
     esac
 
 ARG BASE_TOOLCHAIN_INSTALL_NODE=true
+ARG NODE_VERSION
 RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-artifacts,readonly \
     case "${BASE_TOOLCHAIN_INSTALL_NODE}" in \
       true) /usr/local/share/base-toolchain/scripts/install-node.sh \
-        --artifact-root /opt/toolchain-artifacts/node ;; \
+        --artifact-root /opt/toolchain-artifacts/node \
+        --version "${NODE_VERSION}" ;; \
       false) echo "Skipping Node install." ;; \
       *) echo "ERROR: BASE_TOOLCHAIN_INSTALL_NODE must be true or false." >&2; exit 1 ;; \
     esac
 
 ARG BASE_TOOLCHAIN_INSTALL_CLI_TOOLS=true
+ARG HELM_VERSION
+ARG KUBECTL_VERSION
+ARG ORAS_VERSION
+ARG YQ_VERSION
 RUN --mount=type=bind,from=toolchain_artifacts,source=.,target=/opt/toolchain-artifacts,readonly \
     case "${BASE_TOOLCHAIN_INSTALL_CLI_TOOLS}" in \
       true) /usr/local/share/base-toolchain/scripts/install-cli-tools.sh \
-        --artifact-root /opt/toolchain-artifacts/cli-tools ;; \
+        --artifact-root /opt/toolchain-artifacts/cli-tools \
+        --helm-version "${HELM_VERSION}" \
+        --kubectl-version "${KUBECTL_VERSION}" \
+        --oras-version "${ORAS_VERSION}" \
+        --yq-version "${YQ_VERSION}" ;; \
       false) echo "Skipping CLI tools install." ;; \
       *) echo "ERROR: BASE_TOOLCHAIN_INSTALL_CLI_TOOLS must be true or false." >&2; exit 1 ;; \
     esac

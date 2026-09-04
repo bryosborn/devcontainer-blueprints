@@ -42,7 +42,7 @@ find_single_artifact() {
   local pattern="$2"
   local found
 
-  found="$(find "${ARTIFACT_ROOT}/${tool}" -type f -name "${pattern}" | sort | tail -1 || true)"
+  found="$(find "${ARTIFACT_ROOT}/${tool}" -type f -name "${pattern}" | sort -V | tail -1 || true)"
   if [[ -z "${found}" ]]; then
     echo "ERROR: ${tool} artifact not found with pattern ${pattern}" >&2
     exit 1

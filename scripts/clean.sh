@@ -88,7 +88,6 @@ image_refs=(
   "${BASE_IMAGE}"
   "${BASE_VSCODE_IMAGE}"
   "${BASE_TOOLCHAIN_IMAGE}"
-  "devcontainer-blueprints/${BASE_IMAGE_NAME}-feature:${BASE_IMAGE_VERSION}"
   "devcontainer-blueprints/apt-artifacts-prefetch:latest"
   "apt-artifacts-install-test:latest"
   "toolchain-java-maven-test:latest"

@@ -4,11 +4,16 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # shellcheck source=scripts/env.sh
 source "${REPO_ROOT}/scripts/env.sh"
+# shellcheck source=src/tool-artifacts/lib/toolchain-env.sh
+source "${REPO_ROOT}/src/tool-artifacts/lib/toolchain-env.sh"
 
 load_env_file "${REPO_ROOT}"
+load_toolchain_env "${REPO_ROOT}"
 require_env_vars \
   BASE_TOOLCHAIN_IMAGE \
-  BASE_VSCODE_REMOTE_USER
+  BASE_VSCODE_REMOTE_USER \
+  NODE_VERSION \
+  HELM_VERSION
 
 if ! docker image inspect "${BASE_TOOLCHAIN_IMAGE}" >/dev/null 2>&1; then
   echo "ERROR: Base toolchain image is not available locally:"
@@ -136,10 +141,16 @@ docker run --rm \
 run_image "${BASE_TOOLCHAIN_IMAGE}" java --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" javac --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" mvn --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" node --version
+# The command string is evaluated inside the test container.
+# shellcheck disable=SC2016
+run_image -e "EXPECTED_NODE_VERSION=${NODE_VERSION#v}" "${BASE_TOOLCHAIN_IMAGE}" bash -lc \
+  'test "$(node --version)" = "v${EXPECTED_NODE_VERSION}"; node --version'
 run_image "${BASE_TOOLCHAIN_IMAGE}" npm --version
 run_image "${BASE_TOOLCHAIN_IMAGE}" npx --version
-run_image "${BASE_TOOLCHAIN_IMAGE}" helm version
+# The command string is evaluated inside the test container.
+# shellcheck disable=SC2016
+run_image -e "EXPECTED_HELM_VERSION=${HELM_VERSION#v}" "${BASE_TOOLCHAIN_IMAGE}" bash -lc \
+  'test "$(helm version --template "{{.Version}}")" = "v${EXPECTED_HELM_VERSION}"; helm version'
 run_image "${BASE_TOOLCHAIN_IMAGE}" kubectl version --client
 run_image "${BASE_TOOLCHAIN_IMAGE}" oras version
 run_image "${BASE_TOOLCHAIN_IMAGE}" yq --version

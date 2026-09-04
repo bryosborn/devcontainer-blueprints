@@ -7,7 +7,7 @@ Usage:
   prefetch-server.sh [options]
 
 Options:
-  --version VERSION             VS Code product version, e.g. 1.124.2 or latest.
+  --version VERSION             VS Code product version, e.g. 1.136.1 or latest.
   --commit COMMIT              Exact VS Code commit SHA. If set, version resolution is skipped.
   --quality QUALITY            VS Code quality. Initial supported value: stable.
   --client-platform PLATFORM   Metadata platform, e.g. linux-x64 or linux-arm64.

@@ -60,7 +60,7 @@ docker build \
   --platform "${DOCKER_PLATFORM}" \
   --network=none \
   -f "${REPO_ROOT}/src/base-vscode/test/Dockerfile.extensions" \
-  --build-arg "BASE_IMAGE=${BASE_IMAGE:-mcr.microsoft.com/devcontainers/base:3.0.1-ubuntu22.04}" \
+  --build-arg "BASE_IMAGE=${BASE_IMAGE:-mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04}" \
   --build-arg "VSCODE_COMMIT=${COMMIT}" \
   --build-arg "VSCODE_SERVER_PLATFORM=${SERVER_PLATFORM}" \
   --build-arg "VSCODE_EXTENSION_TARGET_PLATFORM=${TARGET_PLATFORM}" \

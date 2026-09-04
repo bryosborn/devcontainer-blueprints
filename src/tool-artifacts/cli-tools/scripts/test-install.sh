@@ -6,7 +6,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 source "${REPO_ROOT}/src/tool-artifacts/lib/toolchain-env.sh"
 
 load_toolchain_env "${REPO_ROOT}"
-toolchain_require_env_vars TOOLCHAIN_ARTIFACT_ROOT TOOLCHAIN_TEST_BASE_IMAGE
+toolchain_require_env_vars \
+  TOOLCHAIN_ARTIFACT_ROOT \
+  TOOLCHAIN_TEST_BASE_IMAGE \
+  HELM_VERSION \
+  KUBECTL_VERSION \
+  ORAS_VERSION \
+  YQ_VERSION
 
 ARTIFACT_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${TOOLCHAIN_ARTIFACT_ROOT}")"
 
@@ -25,11 +31,18 @@ docker build \
   --build-context "toolchain_artifacts=${ARTIFACT_ROOT}/cli-tools" \
   -f "${REPO_ROOT}/src/tool-artifacts/cli-tools/test/Dockerfile" \
   --build-arg "BASE_IMAGE=${TOOLCHAIN_TEST_BASE_IMAGE}" \
+  --build-arg "HELM_VERSION=${HELM_VERSION}" \
+  --build-arg "KUBECTL_VERSION=${KUBECTL_VERSION}" \
+  --build-arg "ORAS_VERSION=${ORAS_VERSION}" \
+  --build-arg "YQ_VERSION=${YQ_VERSION}" \
   -t "${IMAGE_TAG}" \
   "${REPO_ROOT}/src/tool-artifacts/cli-tools"
 
-docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc '
+docker run --rm --platform "${DOCKER_PLATFORM}" \
+  -e "EXPECTED_HELM_VERSION=${HELM_VERSION#v}" \
+  "${IMAGE_TAG}" bash -lc '
   set -euo pipefail
+  test "$(helm version --template "{{.Version}}")" = "v${EXPECTED_HELM_VERSION}"
   helm version
   kubectl version --client
   oras version

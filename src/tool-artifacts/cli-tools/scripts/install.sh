@@ -4,20 +4,45 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  install.sh --artifact-root DIR
+  install.sh --artifact-root DIR [VERSION OPTIONS]
 
 Options:
   --artifact-root DIR     Directory containing cli-tools artifacts.
+  --helm-version VERSION Install this exact Helm version.
+  --kubectl-version VERSION
+                          Install this exact kubectl version.
+  --oras-version VERSION Install this exact ORAS version.
+  --yq-version VERSION   Install this exact yq version.
   -h, --help              Show help.
 USAGE
 }
 
 ARTIFACT_ROOT="/opt/toolchain-artifacts/cli-tools"
+HELM_VERSION=""
+KUBECTL_VERSION=""
+ORAS_VERSION=""
+YQ_VERSION=""
 
 while (($# > 0)); do
   case "$1" in
     --artifact-root)
       ARTIFACT_ROOT="$2"
+      shift 2
+      ;;
+    --helm-version)
+      HELM_VERSION="$2"
+      shift 2
+      ;;
+    --kubectl-version)
+      KUBECTL_VERSION="$2"
+      shift 2
+      ;;
+    --oras-version)
+      ORAS_VERSION="$2"
+      shift 2
+      ;;
+    --yq-version)
+      YQ_VERSION="$2"
       shift 2
       ;;
     -h|--help)
@@ -39,12 +64,18 @@ fi
 
 find_single_artifact() {
   local tool="$1"
-  local pattern="$2"
+  local version="$2"
+  local pattern="$3"
+  local search_root="${ARTIFACT_ROOT}/${tool}"
   local found
 
-  found="$(find "${ARTIFACT_ROOT}/${tool}" -type f -name "${pattern}" | sort | tail -1 || true)"
+  if [[ -n "${version}" ]]; then
+    search_root="${search_root}/${version#v}"
+  fi
+
+  found="$(find "${search_root}" -type f -name "${pattern}" | sort -V | tail -1 || true)"
   if [[ -z "${found}" ]]; then
-    echo "ERROR: ${tool} artifact not found with pattern ${pattern}" >&2
+    echo "ERROR: ${tool} artifact not found under ${search_root} with pattern ${pattern}" >&2
     exit 1
   fi
 
@@ -79,10 +110,10 @@ find_tar_member_named() {
   printf '%s\n' "${found}"
 }
 
-helm_archive="$(find_single_artifact helm 'helm-v*-linux-*.tar.gz')"
-kubectl_archive="$(find_single_artifact kubectl 'kubernetes-client-linux-*.tar.gz')"
-oras_archive="$(find_single_artifact oras 'oras_*_linux_*.tar.gz')"
-yq_archive="$(find_single_artifact yq 'yq_linux_*.tar.gz')"
+helm_archive="$(find_single_artifact helm "${HELM_VERSION}" 'helm-v*-linux-*.tar.gz')"
+kubectl_archive="$(find_single_artifact kubectl "${KUBECTL_VERSION}" 'kubernetes-client-linux-*.tar.gz')"
+oras_archive="$(find_single_artifact oras "${ORAS_VERSION}" 'oras_*_linux_*.tar.gz')"
+yq_archive="$(find_single_artifact yq "${YQ_VERSION}" 'yq_linux_*.tar.gz')"
 
 install_tar_member "helm" "${helm_archive}" 1 "helm" "/usr/bin/helm"
 install_tar_member "kubectl" "${kubectl_archive}" 1 "client/bin/kubectl" "/usr/bin/kubectl"

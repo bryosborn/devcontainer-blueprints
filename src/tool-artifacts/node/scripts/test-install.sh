@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 source "${REPO_ROOT}/src/tool-artifacts/lib/toolchain-env.sh"
 
 load_toolchain_env "${REPO_ROOT}"
-toolchain_require_env_vars TOOLCHAIN_ARTIFACT_ROOT TOOLCHAIN_TEST_BASE_IMAGE
+toolchain_require_env_vars TOOLCHAIN_ARTIFACT_ROOT TOOLCHAIN_TEST_BASE_IMAGE NODE_VERSION
 
 ARTIFACT_ROOT="$(toolchain_abs_path "${REPO_ROOT}" "${TOOLCHAIN_ARTIFACT_ROOT}")"
 
@@ -25,11 +25,15 @@ docker build \
   --build-context "toolchain_artifacts=${ARTIFACT_ROOT}/node" \
   -f "${REPO_ROOT}/src/tool-artifacts/node/test/Dockerfile" \
   --build-arg "BASE_IMAGE=${TOOLCHAIN_TEST_BASE_IMAGE}" \
+  --build-arg "NODE_VERSION=${NODE_VERSION}" \
   -t "${IMAGE_TAG}" \
   "${REPO_ROOT}/src/tool-artifacts/node"
 
-docker run --rm --platform "${DOCKER_PLATFORM}" "${IMAGE_TAG}" bash -lc '
+docker run --rm --platform "${DOCKER_PLATFORM}" \
+  -e "EXPECTED_NODE_VERSION=${NODE_VERSION#v}" \
+  "${IMAGE_TAG}" bash -lc '
   set -euo pipefail
+  test "$(node --version)" = "v${EXPECTED_NODE_VERSION}"
   node --version
   npm --version
   npx --version
