@@ -316,6 +316,7 @@ test("creates and verifies a lock containing normalized config and real resoluti
     runtime: { dockerClient: "test", dockerBuildx: "test" }
   });
   assert.equal(lock.source.semanticSha256, wolfiConfigSemanticSha256(validConfig));
+  assert.match(lock.source.fileSha256, /^[a-f0-9]{64}$/);
   assert.equal(lock.resolved.baseImage.digest, AMD64_DIGEST);
   assert.equal(verifyWolfiLock(validConfig, lock), true);
 });

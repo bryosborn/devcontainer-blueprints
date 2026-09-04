@@ -262,6 +262,7 @@ export function createWolfiLock(config, {
     generatedAt,
     source: {
       path: relativeSourcePath(configPath),
+      fileSha256: crypto.createHash("sha256").update(fs.readFileSync(configPath)).digest("hex"),
       semanticSha256: wolfiConfigSemanticSha256(config)
     },
     resolver: {
@@ -302,11 +303,12 @@ function parseArguments(argv) {
   const options = {
     configPath: DEFAULT_CONFIG_PATH,
     lockPath: DEFAULT_LOCK_PATH,
+    baseLockPath: null,
     fragmentPaths: []
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--config" || argument === "--lock" || argument === "--resolution-file") {
+    if (argument === "--config" || argument === "--lock" || argument === "--base-lock" || argument === "--resolution-file") {
       const value = argv[index + 1];
       if (value == null || value.startsWith("--")) {
         throw new WolfiConfigError(`${argument} requires a path`);
@@ -316,6 +318,8 @@ function parseArguments(argv) {
         options.configPath = path.resolve(value);
       } else if (argument === "--lock") {
         options.lockPath = path.resolve(value);
+      } else if (argument === "--base-lock") {
+        options.baseLockPath = path.resolve(value);
       } else {
         options.fragmentPaths.push(path.resolve(value));
       }
@@ -336,6 +340,7 @@ function printUsage() {
 Options:
   --config PATH           Source YAML (default: config/wolfi-build.yaml)
   --lock PATH             Generated lockfile (default: config/wolfi-build.lock.json)
+  --base-lock PATH        Reuse base resolution from an earlier verified lock
   --resolution-file PATH  Merge a real resolver-produced JSON fragment; repeatable
   --help                  Show this help
 
@@ -358,20 +363,33 @@ async function main(argv) {
 
   const config = loadWolfiConfig(options.configPath);
   const configSemanticSha256 = wolfiConfigSemanticSha256(config);
-  const baseImage = resolveBaseImage(config);
+  let baseImage;
+  if (options.baseLockPath == null) {
+    baseImage = resolveBaseImage(config);
+  } else {
+    let baseLock;
+    try {
+      baseLock = JSON.parse(fs.readFileSync(options.baseLockPath, "utf8"));
+    } catch (error) {
+      throw new WolfiConfigError(`cannot read base lock ${options.baseLockPath}: ${error.message}`);
+    }
+    verifyWolfiLock(config, baseLock);
+    baseImage = baseLock.resolved.baseImage;
+  }
   const externalStages = options.fragmentPaths.map((fragmentPath) => {
     const fragment = loadResolutionFragment(fragmentPath, configSemanticSha256);
     return {
       name: fragment.name,
       version: fragment.version,
       resolved: fragment.resolved,
-      source: relativeSourcePath(fragmentPath),
       sourceSha256: fragment.sourceSha256
     };
   });
   const runtime = {
     dockerClient: run("docker", ["version", "--format", "{{.Client.Version}}"]),
-    dockerBuildx: run("docker", ["buildx", "version"])
+    dockerBuildx: run("docker", ["buildx", "version"]),
+    npm: run("npm", ["--version"]),
+    python: run("python3", ["--version"])
   };
   const lock = createWolfiLock(config, {
     configPath: options.configPath,

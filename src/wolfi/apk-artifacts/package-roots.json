@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    { "module": "dod", "name": "bash", "repository": "main" },
+    { "module": "dod", "name": "ca-certificates", "repository": "main" },
+    { "module": "dod", "name": "coreutils", "repository": "main" },
+    { "module": "dod", "name": "docker-cli", "repository": "main", "configPath": "docker.cli" },
+    { "module": "dod", "name": "docker-cli-buildx", "repository": "main", "configPath": "docker.buildx" },
+    { "module": "dod", "name": "docker-compose", "repository": "main", "configPath": "docker.compose" },
+    { "module": "dod", "name": "posix-libc-utils", "repository": "main" },
+    { "module": "dod", "name": "shadow", "repository": "main" },
+    { "module": "dod", "name": "socat", "repository": "main" },
+    { "module": "dod", "name": "sudo", "repository": "main" },
+
+    { "module": "vscode", "name": "bash", "repository": "main" },
+    { "module": "vscode", "name": "coreutils", "repository": "main" },
+    { "module": "vscode", "name": "glibc", "repository": "main" },
+    { "module": "vscode", "name": "jq", "repository": "main" },
+    { "module": "vscode", "name": "libstdc++", "repository": "main" },
+    { "module": "vscode", "name": "posix-libc-utils", "repository": "main" },
+
+    { "module": "toolchain-core", "name": "build-base", "repository": "main", "configPath": "toolchain.build" },
+    { "module": "toolchain-core", "name": "clang-22", "repository": "main", "configPath": "toolchain.build.clang" },
+    { "module": "toolchain-core", "name": "cmake", "repository": "main", "configPath": "toolchain.build" },
+    { "module": "toolchain-core", "name": "openssl-dev", "repository": "main", "configPath": "toolchain.build" },
+    { "module": "toolchain-core", "name": "openssl", "repository": "main", "configPath": "toolchain.build" },
+    { "module": "toolchain-core", "nameTemplate": "python-{selector}-base", "repository": "main", "configPath": "toolchain.python", "each": true },
+    { "module": "toolchain-core", "nameTemplate": "py{selector}-pip-base", "repository": "main", "configPath": "toolchain.python", "each": true, "validateSelector": false },
+    { "module": "toolchain-core", "nameTemplate": "openjdk-{selector}-default-jdk", "repository": "main", "configPath": "toolchain.java" },
+    { "module": "toolchain-core", "nameTemplate": "maven-{selector}", "repository": "main", "configPath": "toolchain.maven" },
+    { "module": "toolchain-core", "nameTemplate": "nodejs-{selector}", "repository": "main", "configPath": "toolchain.node" },
+    { "module": "toolchain-core", "nameTemplate": "npm-{selector}", "repository": "main", "configPath": "toolchain.npm" },
+    { "module": "toolchain-core", "name": "corepack", "repository": "main", "configPath": "toolchain.node", "validateSelector": false },
+    { "module": "toolchain-core", "nameTemplate": "clamav-{selector}-scanner", "repository": "main", "configPath": "toolchain.clamav" },
+    { "module": "toolchain-core", "name": "yq", "repository": "main", "configPath": "toolchain.yq" },
+
+    { "module": "helm", "nameTemplate": "helm-{selector}", "repository": "main", "configPath": "toolchain.helm" },
+    { "module": "oras", "name": "oras", "repository": "main", "configPath": "toolchain.oras" },
+    { "module": "mongosh", "name": "mongosh", "repository": "extra", "configPath": "toolchain.mongosh" },
+    { "module": "mongodb-database-tools", "name": "mongo-tools", "repository": "main", "configPath": "toolchain.mongodbDatabaseTools" }
+  ],
+  "packageSets": {
+    "dod": ["dod"],
+    "vscode": ["vscode"],
+    "toolchain-core": ["toolchain-core"],
+    "helm": ["helm"],
+    "oras": ["oras"],
+    "mongosh": ["mongosh"],
+    "mongodb-database-tools": ["mongodb-database-tools"],
+    "helm-probe": ["toolchain-core", "helm"],
+    "oras-probe": ["toolchain-core", "oras"],
+    "mongosh-probe": ["toolchain-core", "mongosh"],
+    "mongodb-database-tools-probe": ["toolchain-core", "mongodb-database-tools"],
+    "toolchain": ["toolchain-core", "helm", "oras", "mongosh", "mongodb-database-tools"]
+  }
+}

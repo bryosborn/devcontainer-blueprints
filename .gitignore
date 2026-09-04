@@ -21,3 +21,7 @@ artifacts-*.tar.gz.sha256
 
 # Node dependencies for resolver tooling
 node_modules/
+
+# Generated language caches
+__pycache__/
+*.pyc

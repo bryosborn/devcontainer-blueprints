@@ -525,8 +525,11 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true } = {}) 
     configError("lock.generatedAt", "must be an ISO 8601 UTC timestamp");
   }
 
-  const source = recordAt(lock.source, "lock.source", ["path", "semanticSha256"]);
+  const source = recordAt(lock.source, "lock.source", ["path", "fileSha256", "semanticSha256"]);
   stringAt(source.path, "lock.source.path", { maxLength: 512 });
+  if (!SHA256_PATTERN.test(source.fileSha256)) {
+    configError("lock.source.fileSha256", "must be a lowercase SHA256 value");
+  }
   if (!SHA256_PATTERN.test(source.semanticSha256)) {
     configError("lock.source.semanticSha256", "must be a lowercase SHA256 value");
   }
@@ -626,6 +629,13 @@ export function loadAndVerifyWolfiLock(configPath = DEFAULT_CONFIG_PATH, lockPat
   const config = loadWolfiConfig(configPath);
   const lock = readJsonFile(lockPath, "lockfile");
   verifyWolfiLock(config, lock, options);
+  const actualFileSha256 = crypto.createHash("sha256").update(fs.readFileSync(configPath)).digest("hex");
+  if (lock.source.fileSha256 !== actualFileSha256) {
+    configError(
+      "lock.source.fileSha256",
+      `does not match the YAML bytes (expected ${actualFileSha256}); run ./scripts/wolfi/update-lock.sh`
+    );
+  }
   return { config, lock };
 }
 

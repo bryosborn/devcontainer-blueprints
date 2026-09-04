@@ -94,7 +94,6 @@ download_artifact() {
     --retry-delay 2 \
     --connect-timeout 20 \
     --show-error \
-    --insecure \
     --output "${output}.tmp" \
     "${url}"
   mv "${output}.tmp" "${output}"
