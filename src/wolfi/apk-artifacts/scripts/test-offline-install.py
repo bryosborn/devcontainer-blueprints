@@ -59,7 +59,11 @@ def build_test_script(
 ) -> tuple[str, dict[str, set[str]]]:
     package_sets = require_mapping(apk.get("packageSets"), "resolved.apk.packageSets")
     repositories = require_mapping(apk.get("repositories"), "resolved.apk.repositories")
-    lines = ["set -eux", "mkdir -p /work/results /work/repos /work/roots"]
+    lines = [
+        "set -eux",
+        "mkdir -p /work/results /work/repos /work/roots",
+        "apk info -v | sort > /work/results/base.installed",
+    ]
     expected_installed: dict[str, set[str]] = {}
 
     for set_name in TESTED_PACKAGE_SETS:
@@ -93,7 +97,26 @@ def build_test_script(
                     for repository in used_repositories
                 ]
                 + [
-                    root,
+                    f"{root}/etc/apk",
+                    f"{root}/lib/apk/db",
+                    f"{root}/var/cache/apk",
+                    f"{root}/dev",
+                ]
+            )
+        )
+        lines.append(
+            f"cp /etc/apk/world {shlex.quote(root + '/etc/apk/world')}"
+        )
+        lines.append(
+            f"cp /lib/apk/db/installed {shlex.quote(root + '/lib/apk/db/installed')}"
+        )
+        lines.append(
+            "touch "
+            + shell_join(
+                [
+                    f"{root}/lib/apk/db/scripts.tar",
+                    f"{root}/lib/apk/db/triggers",
+                    f"{root}/dev/null",
                 ]
             )
         )
@@ -129,7 +152,7 @@ def build_test_script(
             f"apk --root {shlex.quote(root)} --no-network --no-scripts "
             "--keys-dir /artifacts/keys "
             f"--repositories-file {shlex.quote(set_repo_root + '/repositories.list')} "
-            f"add --initdb {shell_join(constraints)}"
+            f"add {shell_join(constraints)}"
         )
         lines.append(
             f"apk --root {shlex.quote(root)} info -v | sort > "
@@ -213,7 +236,13 @@ def run_offline_install(
                 part.strip() for part in (result.stderr, result.stdout) if part.strip()
             )
             raise SupplyError(f"offline signed APK installation failed: {detail}")
-        installed: dict[str, set[str]] = {}
+        try:
+            base_installed = set(
+                (results / "base.installed").read_text(encoding="utf-8").splitlines()
+            )
+        except OSError as error:
+            raise SupplyError("offline install omitted base package results") from error
+        installed: dict[str, set[str]] = {"base": base_installed}
         for set_name in TESTED_PACKAGE_SETS:
             path = results / f"{set_name}.installed"
             try:
@@ -288,10 +317,12 @@ def main() -> None:
             platform=platform,
             script=script,
         )
+        base_installed = installed["base"]
         for set_name in TESTED_PACKAGE_SETS:
-            if installed[set_name] != expected[set_name]:
-                missing = sorted(expected[set_name] - installed[set_name])
-                unexpected = sorted(installed[set_name] - expected[set_name])
+            expected_with_base = expected[set_name] | base_installed
+            if installed[set_name] != expected_with_base:
+                missing = sorted(expected_with_base - installed[set_name])
+                unexpected = sorted(installed[set_name] - expected_with_base)
                 raise SupplyError(
                     f"offline {set_name} closure mismatch; missing={missing}, "
                     f"unexpected={unexpected}"

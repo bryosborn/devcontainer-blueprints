@@ -78,6 +78,9 @@ LOCK_FILE="$(absolute_repo_path "${LOCK_FILE}")"
 [[ -f "${CONFIG_FILE}" ]] || { echo "ERROR: Missing config: ${CONFIG_FILE}" >&2; exit 1; }
 [[ -f "${LOCK_FILE}" ]] || { echo "ERROR: Missing lock: ${LOCK_FILE}" >&2; exit 1; }
 
+# shellcheck source=scripts/wolfi/lib.sh
+source "${REPO_ROOT}/scripts/wolfi/lib.sh"
+
 config_tool="${REPO_ROOT}/scripts/wolfi/config.mjs"
 if command -v node >/dev/null 2>&1 && [[ -f "${config_tool}" ]] && \
    [[ -f "${REPO_ROOT}/node_modules/yaml/package.json" ]]; then
@@ -129,6 +132,7 @@ assert_image_metadata() {
     echo "ERROR: Required local image is missing: ${image}" >&2
     exit 1
   }
+  wolfi_verify_image_lock "${image}" "${LOCK_FILE}"
   local actual_user actual_arch expected_arch actual_variant metadata
   actual_user="$(docker image inspect "${image}" --format '{{.Config.User}}')"
   actual_arch="$(docker image inspect "${image}" --format '{{.Architecture}}')"

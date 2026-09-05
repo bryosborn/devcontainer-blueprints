@@ -345,6 +345,7 @@ def resolve_package_set_urls(
                 "/work/root/lib/apk/db /work/root/var/cache/apk /work/root/dev"
             ),
             "cp -R /artifacts/repositories /artifacts/keys /work/root/",
+            "cp /etc/apk/world /work/root/etc/apk/world",
             (
                 "printf '%s\\n' "
                 "file:///work/root/repositories/main "
@@ -352,7 +353,7 @@ def resolve_package_set_urls(
                 "> /work/repositories.list"
             ),
             (
-                "touch /work/root/etc/apk/world /work/root/lib/apk/db/installed "
+                "touch /work/root/lib/apk/db/installed "
                 "/work/root/lib/apk/db/scripts.tar /work/root/lib/apk/db/triggers "
                 "/work/root/dev/null"
             ),
@@ -481,7 +482,7 @@ def download_packages(
         digest, _reused = download(url, destination)
         return repository, url, destination, digest
 
-    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as executor:
+    with ThreadPoolExecutor(max_workers=min(4, len(targets))) as executor:
         downloaded = list(executor.map(fetch, targets))
 
     records: list[dict[str, Any]] = []

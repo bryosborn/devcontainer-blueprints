@@ -70,6 +70,52 @@ wolfi_verify_lock() {
   fi
 }
 
+# This label binds a built image to the exact generated lockfile bytes. It is
+# intentionally distinct from the YAML semantic/source hashes stored inside
+# the lock: a resolver refresh with unchanged user configuration must still
+# make every image built from the previous resolution stale.
+WOLFI_LOCK_SHA256_LABEL="devcontainers.wolfi.lock.sha256"
+
+wolfi_lock_sha256() {
+  local lock_file="$1"
+  local lock_sha256
+
+  wolfi_require_commands sha256sum
+  [[ -f "${lock_file}" ]] || {
+    echo "ERROR: Wolfi build lock is missing: ${lock_file}" >&2
+    return 1
+  }
+  lock_sha256="$(sha256sum "${lock_file}" | awk '{print $1}')"
+  if [[ ! "${lock_sha256}" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "ERROR: Could not calculate a valid SHA256 for Wolfi lock: ${lock_file}" >&2
+    return 1
+  fi
+  printf '%s\n' "${lock_sha256}"
+}
+
+wolfi_verify_image_lock() {
+  local image_ref="$1"
+  local lock_file="$2"
+  local expected_sha256 actual_sha256
+
+  wolfi_require_commands docker sha256sum
+  expected_sha256="$(wolfi_lock_sha256 "${lock_file}")"
+  if ! docker image inspect "${image_ref}" >/dev/null 2>&1; then
+    echo "ERROR: Required Wolfi image is not available locally: ${image_ref}" >&2
+    return 1
+  fi
+  actual_sha256="$(docker image inspect --format \
+    '{{index .Config.Labels "devcontainers.wolfi.lock.sha256"}}' \
+    "${image_ref}")"
+  if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
+    echo "ERROR: Wolfi image ${image_ref} was not built from the current exact lock bytes." >&2
+    echo "  image ${WOLFI_LOCK_SHA256_LABEL}: ${actual_sha256:-<missing>}" >&2
+    echo "  current lock SHA256: ${expected_sha256}" >&2
+    echo "Rebuild the Wolfi images before testing or claiming pristine acceptance." >&2
+    return 1
+  fi
+}
+
 wolfi_platform_slug() {
   case "$1" in
     linux/amd64) printf '%s\n' linux-amd64 ;;

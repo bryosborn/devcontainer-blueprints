@@ -155,6 +155,9 @@ LOCK_FILE="$(absolute_repo_path "${LOCK_FILE}")"
 [[ -f "${LOCK_FILE}" ]] || { echo "ERROR: Missing Wolfi lock: ${LOCK_FILE}" >&2; exit 1; }
 [[ -f "${DOCKERFILE}" ]] || { echo "ERROR: Missing Dockerfile: ${DOCKERFILE}" >&2; exit 1; }
 
+# shellcheck source=scripts/wolfi/lib.sh
+source "${REPO_ROOT}/scripts/wolfi/lib.sh"
+
 verify_config_lock_pair() {
   local config_tool="${REPO_ROOT}/scripts/wolfi/config.mjs"
   if command -v node >/dev/null 2>&1 && [[ -f "${config_tool}" ]] && \
@@ -179,6 +182,7 @@ verify_config_lock_pair() {
   fi
 }
 verify_config_lock_pair
+LOCK_SHA256="$(wolfi_lock_sha256 "${LOCK_FILE}")"
 
 LOCKED_FINAL_IMAGE="$(jq -er '.images.toolchain.reference' "${LOCK_FILE}")"
 FINAL_IMAGE="${FINAL_IMAGE:-${LOCKED_FINAL_IMAGE}}"
@@ -479,6 +483,7 @@ if ! docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
   echo "ERROR: Wolfi VS Code base image is not local: ${BASE_IMAGE}" >&2
   exit 1
 fi
+wolfi_verify_image_lock "${BASE_IMAGE}" "${LOCK_FILE}"
 
 platform_arch="${PLATFORM#linux/}"
 base_arch="$(docker image inspect "${BASE_IMAGE}" --format '{{.Architecture}}')"
@@ -533,6 +538,7 @@ image_for_target() {
 for target in "${targets[@]}"; do
   output_image="$(image_for_target "${target}")"
   echo "Building ${target}: ${output_image}"
+  echo "  exact lock SHA256: ${LOCK_SHA256}"
   docker build \
     --platform "${PLATFORM}" \
     --network=none \
@@ -542,6 +548,7 @@ for target in "${targets[@]}"; do
     --build-context "kubectl_artifacts=${KUBECTL_ARTIFACTS}" \
     --build-context "rust_artifacts=${RUST_ARTIFACTS}" \
     --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
+    --build-arg "WOLFI_LOCK_SHA256=${LOCK_SHA256}" \
     --build-arg "REMOTE_USER=${REMOTE_USER}" \
     --build-arg "WOLFI_APK_ARCHITECTURE=${APK_ARCHITECTURE}" \
     --build-arg "WOLFI_APK_REPOSITORY_SUBDIRS=${REPOSITORY_SUBDIRS}" \
@@ -577,6 +584,7 @@ for target in "${targets[@]}"; do
     "${SOURCE_ROOT}"
 
   actual_user="$(docker image inspect "${output_image}" --format '{{.Config.User}}')"
+  wolfi_verify_image_lock "${output_image}" "${LOCK_FILE}"
   [[ "${actual_user}" == "${REMOTE_USER}" ]] || {
     echo "ERROR: ${output_image} OCI user is ${actual_user}, expected named user ${REMOTE_USER}." >&2
     exit 1

@@ -1,0 +1,5 @@
+ARG SOURCE_IMAGE=scratch
+FROM ${SOURCE_IMAGE}
+
+# OCI labels are supplied with docker build --label so this metadata-only layer
+# can bind the disposable comparator to its exact configuration and inputs.

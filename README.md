@@ -2,7 +2,7 @@
 
 Local-first Dev Container image and artifact workflows for rebuilding a reproducible development environment.
 
-The current stack is:
+The current Ubuntu stack, and the repository default, is:
 
 ```text
 mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04
@@ -10,6 +10,95 @@ mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04
   -> base-vscode     base-dod plus pinned VS Code Server and uninstalled VSIX archive
   -> base-toolchain  base-vscode plus selected offline-installed tools
 ```
+
+## Wolfi Evaluation Stack
+
+A parallel Wolfi build is available for side-by-side size and CVE evaluation:
+
+```text
+cgr.dev/chainguard/wolfi-base:<locked digest>
+  -> wolfi-base-dod        native Docker CLI, Buildx, Compose, and socket proxy
+  -> wolfi-base-vscode     pinned VS Code Server and uninstalled VSIX archive
+  -> wolfi-base-toolchain  native toolchain plus locked kubectl and Rust artifacts
+```
+
+The default Wolfi image refs are `devcontainers/wolfi-base-dod:0.1.0`,
+`devcontainers/wolfi-base-vscode:0.1.0`, and
+`devcontainers/wolfi-base-toolchain:0.1.0`. Helm 4, ORAS, mongosh, and MongoDB
+Database Tools are enabled while their CVE and size contributions are measured;
+separate probe images isolate each of those four native tools. ClamAV is
+temporarily disabled in the final Wolfi profile: the signed x86_64 Main index
+currently offers only `1.5.2-r7`, for which the raw scan reports seven unique
+High CVEs (56 occurrences across eight split packages). The Trivy-listed fixed
+build, `1.5.4-r0`, is not yet available from that signed index, so this branch
+uses neither an ignore nor a vendor fallback. See the Wolfi guide for the
+native-package re-enable procedure. The native `mongosh` APK is labeled
+`2.10.0-r1` but reports runtime `2.9.1`; both values remain visible in the test
+and comparison output.
+
+Edit only [`config/wolfi-build.yaml`](config/wolfi-build.yaml). The generated
+[`config/wolfi-build.lock.json`](config/wolfi-build.lock.json) records the
+platform-specific base digest, signed APK closure, exact versions, URLs, and
+SHA256 values. APK closure resolution also carries the immutable base image's
+exact `/etc/apk/world` constraints, preventing a newer rolling index from
+silently replacing base packages during dependency resolution. The connected
+refresh and frozen workflow is:
+
+```bash
+npm ci
+./scripts/wolfi/update-lock.sh
+./scripts/wolfi/prefetch-all.sh
+./scripts/wolfi/build-all.sh
+./scripts/wolfi/test-all.sh
+./scripts/wolfi/scan.sh
+./scripts/wolfi/compare.sh
+```
+
+Only `update-lock.sh` resolves mutable selectors. Review its YAML and lockfile
+diff before accepting an upgrade. Frozen prefetch verifies or retrieves only
+the exact locked bytes. Transient download retries are bounded, and every
+candidate must still pass the locked content/hash checks before it replaces a
+cached artifact. Every Wolfi image and probe is labeled with the exact SHA256
+of the complete lockfile; downstream builds, tests, and scans reject stale or
+unlabeled images. Image builds consume those artifacts with Docker networking
+disabled.
+
+The Rust bundle explicitly includes `rust-analyzer`, so the archived Rust
+Analyzer VSIX has its native language server offline. The network-disabled
+component test requires that server to answer an LSP initialize request. The
+two reviewed lower-severity Wolfi findings are dormant `Cargo.lock` records in
+the requested `rust-src` source bundle: `serde_with` Medium
+`GHSA-7gcf-g7xr-8hxj` and `rand` Low `GHSA-cq8v-f236-94qc`. They are not native
+tool executables and remain unignored in the raw results.
+
+The VSIX transfer archive is reproducible from identical locked inputs: member
+order, timestamps, numeric ownership, directory/file modes, and gzip metadata
+are normalized; ambient `TAR_OPTIONS`/`GZIP` settings are ignored; and a test
+requires byte-identical output across those settings and different umasks.
+
+The scan preserves the Ubuntu JSON, CycloneDX, TSV, and CSV formats, while
+keeping raw results separate from Ubuntu's header-package policy view. It
+clears ambient `TRIVY_*` variables and uses empty config and ignore files so a
+local Trivy setting cannot narrow the raw scan. Its default acceptance gate
+returns nonzero for any Critical or High finding in the three final Wolfi
+images. The comparison reports `PASS` only when an evaluated acceptance result
+matches the verified final-image reports and frozen scan context; skipped or
+unverified gates are identified explicitly. For fair all-tools comparison, the
+locally provenanced Ubuntu comparator matches Wolfi's ClamAV enablement and is
+accepted only when its configuration, artifacts, recipe, filesystem, and
+immutable scan identity validate.
+
+The default locked scan also requires the core image and every native-tool
+probe selected by the lock. Comparison re-reads the current lock and verifies
+its exact bytes hash, platform, final-image role ordering, and complete derived
+probe manifest against the suite and raw reports; custom or incomplete scans
+cannot claim a complete or equivalent all-tools assessment.
+
+See the [Wolfi implementation guide](docs/wolfi.md) for locking and checksum
+policy, offline operation, UID/GID and Docker-socket behavior, native-tool
+choices, scan semantics, architecture changes, and current limitations. The
+existing Ubuntu and WSL workflows below remain unchanged; WSL is not part of
+the Wolfi evaluation.
 
 ## Quick Start
 

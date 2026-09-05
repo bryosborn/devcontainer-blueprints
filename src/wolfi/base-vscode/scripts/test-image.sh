@@ -15,6 +15,10 @@ Options:
   --install-extensions        Install the verified server VSIX payload inside
                               the disposable test container and extract the
                               client-only VSIX payload.
+  --test-extension-components
+                              Implies --install-extensions, then starts the
+                              representative Python, C++, Rust, Java, YAML,
+                              XML, and Docker executable/module components.
   --skip-server-start         Check the server binary but skip its socket test.
   -h, --help                  Show this help.
 
@@ -32,6 +36,7 @@ REMOTE_USER=""
 VSCODE_COMMIT=""
 EXTENSION_ARCHIVE_NAME="vscode-extensions.tar.gz"
 INSTALL_EXTENSIONS=false
+TEST_EXTENSION_COMPONENTS=false
 START_SERVER=true
 
 while (($# > 0)); do
@@ -58,6 +63,11 @@ while (($# > 0)); do
       INSTALL_EXTENSIONS=true
       shift
       ;;
+    --test-extension-components)
+      INSTALL_EXTENSIONS=true
+      TEST_EXTENSION_COMPONENTS=true
+      shift
+      ;;
     --skip-server-start)
       START_SERVER=false
       shift
@@ -74,7 +84,7 @@ while (($# > 0)); do
   esac
 done
 
-for command_name in docker jq; do
+for command_name in docker jq sha256sum; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: ${command_name}" >&2
     exit 1
@@ -87,6 +97,8 @@ fi
   echo "ERROR: Wolfi lockfile is missing: ${LOCK_FILE}" >&2
   exit 1
 }
+# shellcheck source=scripts/wolfi/lib.sh
+source "${REPO_ROOT}/scripts/wolfi/lib.sh"
 
 IMAGE_REF="${IMAGE_REF:-$(jq -er '.images.vscode.reference' "${LOCK_FILE}")}"
 PLATFORM="${PLATFORM:-$(jq -er '.config.images.platform' "${LOCK_FILE}")}"
@@ -97,6 +109,7 @@ VSCODE_COMMIT="${VSCODE_COMMIT:-$(jq -r '
   // .resolved.vscode.serverCommit
   // empty
 ' "${LOCK_FILE}")}"
+VSCODE_VERSION="$(jq -er '.resolved.vscode.productVersion' "${LOCK_FILE}")"
 
 [[ "${VSCODE_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || {
   echo "ERROR: Expected VS Code commit is not a 40-character SHA: ${VSCODE_COMMIT:-<empty>}" >&2
@@ -112,6 +125,21 @@ esac
 if ! docker image inspect "${IMAGE_REF}" >/dev/null 2>&1; then
   echo "ERROR: Wolfi VS Code image is unavailable: ${IMAGE_REF}" >&2
   exit 1
+fi
+wolfi_verify_image_lock "${IMAGE_REF}" "${LOCK_FILE}"
+
+EXTENSION_COMPONENT_TEST_B64=""
+if [[ "${TEST_EXTENSION_COMPONENTS}" == true ]]; then
+  component_test="${SCRIPT_DIR}/test-extension-components.mjs"
+  [[ -f "${component_test}" ]] || {
+    echo "ERROR: Extension component test helper is missing: ${component_test}" >&2
+    exit 1
+  }
+  command -v base64 >/dev/null 2>&1 || {
+    echo "ERROR: Required command not found: base64" >&2
+    exit 1
+  }
+  EXTENSION_COMPONENT_TEST_B64="$(base64 -w0 "${component_test}")"
 fi
 
 actual_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${IMAGE_REF}")"
@@ -142,8 +170,11 @@ docker run --rm \
   --entrypoint /bin/bash \
   -e "EXPECTED_REMOTE_USER=${REMOTE_USER}" \
   -e "EXPECTED_VSCODE_COMMIT=${VSCODE_COMMIT}" \
+  -e "EXPECTED_VSCODE_VERSION=${VSCODE_VERSION}" \
   -e "EXTENSION_ARCHIVE_NAME=${EXTENSION_ARCHIVE_NAME}" \
   -e "INSTALL_EXTENSIONS=${INSTALL_EXTENSIONS}" \
+  -e "TEST_EXTENSION_COMPONENTS=${TEST_EXTENSION_COMPONENTS}" \
+  -e "EXTENSION_COMPONENT_TEST_B64=${EXTENSION_COMPONENT_TEST_B64}" \
   -e "START_SERVER=${START_SERVER}" \
   "${IMAGE_REF}" \
   -lc '
@@ -168,6 +199,17 @@ docker run --rm \
     test -f "${legacy_dir}/0"
     test -x "${current_dir}/node"
     "${current_dir}/node" --version
+    jq -e --arg commit "${EXPECTED_VSCODE_COMMIT}" \
+      --arg version "${EXPECTED_VSCODE_VERSION}" \
+      ".commit == \$commit and .version == \$version" \
+      "${current_dir}/product.json" >/dev/null
+    test -z "$(find "${remote_home}/.vscode-server/cli/servers" \
+      -mindepth 1 -maxdepth 1 -type d \
+      ! -name "Stable-${EXPECTED_VSCODE_COMMIT}" -print -quit)"
+    test -z "$(find "${remote_home}/.vscode-server/bin" \
+      -mindepth 1 -maxdepth 1 -type d \
+      ! -name "${EXPECTED_VSCODE_COMMIT}" -print -quit)"
+    current_server_sha_before="$(sha256sum "${current_server}" | cut -d " " -f1)"
 
     for command_name in bash docker docker-compose jq ldconfig sha256sum socat tar; do
       command -v "${command_name}" >/dev/null
@@ -262,7 +304,27 @@ docker run --rm \
       test -d "${client_output}"
       test -f "${client_output}/SHA256SUMS"
       (cd "${client_output}" && sha256sum --check --strict SHA256SUMS)
+
+      if [[ "${TEST_EXTENSION_COMPONENTS}" == true ]]; then
+        for command_name in base64 java python3.13 rustc rustup; do
+          command -v "${command_name}" >/dev/null
+        done
+        component_test=/tmp/test-extension-components.mjs
+        printf %s "${EXTENSION_COMPONENT_TEST_B64}" | base64 -d >"${component_test}"
+        "${current_dir}/node" \
+          "${component_test}" \
+          "${remote_home}/.vscode-server/extensions"
+      fi
     fi
+
+    test "$(sha256sum "${current_server}" | cut -d " " -f1)" = "${current_server_sha_before}"
+    test -z "$(find "${remote_home}/.vscode-server/cli/servers" \
+      -mindepth 1 -maxdepth 1 -type d \
+      ! -name "Stable-${EXPECTED_VSCODE_COMMIT}" -print -quit)"
+    test -z "$(find "${remote_home}/.vscode-server/bin" \
+      -mindepth 1 -maxdepth 1 -type d \
+      ! -name "${EXPECTED_VSCODE_COMMIT}" -print -quit)"
+    echo "Verified reuse of the locked VS Code Server commit with networking disabled; no second server layout appeared."
 
     for forbidden_package in ffmpeg fontconfig xorg-server; do
       if apk info -e "${forbidden_package}" >/dev/null 2>&1; then
@@ -272,4 +334,8 @@ docker run --rm \
     done
   '
 
+if [[ "${TEST_EXTENSION_COMPONENTS}" == true ]]; then
+  echo "Python, C++, Rust, Java, YAML, XML, and Docker component protocol smokes passed offline."
+  echo "Full VS Code extension-host activation still requires a matching desktop client."
+fi
 echo "Wolfi VS Code image test completed successfully."

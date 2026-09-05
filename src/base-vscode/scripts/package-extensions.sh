@@ -56,7 +56,7 @@ if [[ ! -f "${LOCKFILE}" ]]; then
   exit 1
 fi
 
-for cmd in jq sha256sum tar; do
+for cmd in gzip jq sha256sum tar; do
   if ! command -v "${cmd}" >/dev/null 2>&1; then
     echo "ERROR: required command not found: ${cmd}" >&2
     exit 1
@@ -133,23 +133,38 @@ for extension_id in "${CLIENT_EXTENSIONS[@]}"; do
   package_extension client "${extension_id}"
 done
 
-sort -o "${PAYLOAD_DIR}/SHA256SUMS" "${PAYLOAD_DIR}/SHA256SUMS"
+LC_ALL=C sort -o "${PAYLOAD_DIR}/SHA256SUMS" "${PAYLOAD_DIR}/SHA256SUMS"
+
+# Archive modes must not depend on either the caller's umask or the modes of
+# downloaded inputs. Keep the payload data-only: directories are traversable
+# and every lock/checksum/VSIX file is read-only data from the archive's point
+# of view.
+find "${PAYLOAD_DIR}" -type d -exec chmod 0755 {} +
+find "${PAYLOAD_DIR}" -type f -exec chmod 0644 {} +
 
 ARCHIVE_TMP="${OUTPUT}.tmp"
 rm -f "${ARCHIVE_TMP}"
-tar \
-  --sort=name \
-  --mtime='UTC 1970-01-01' \
-  --owner=0 \
-  --group=0 \
-  --numeric-owner \
-  -czf "${ARCHIVE_TMP}" \
-  -C "${STAGING_DIR}" \
-  vscode-extensions
+(
+  unset TAR_OPTIONS
+  LC_ALL=C tar \
+    --sort=name \
+    --mtime='UTC 1970-01-01' \
+    --owner=0 \
+    --group=0 \
+    --numeric-owner \
+    -cf - \
+    -C "${STAGING_DIR}" \
+    vscode-extensions
+) | (
+  unset GZIP
+  gzip -n -6
+) > "${ARCHIVE_TMP}"
+chmod 0644 "${ARCHIVE_TMP}"
 mv "${ARCHIVE_TMP}" "${OUTPUT}"
 
 ARCHIVE_SHA="$(sha256sum "${OUTPUT}" | awk '{print $1}')"
 printf '%s  %s\n' "${ARCHIVE_SHA}" "$(basename "${OUTPUT}")" > "${OUTPUT}.sha256"
+chmod 0644 "${OUTPUT}.sha256"
 
 echo "VS Code extension archive complete:"
 echo "  ${OUTPUT}"

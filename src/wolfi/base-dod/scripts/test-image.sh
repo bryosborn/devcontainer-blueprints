@@ -71,7 +71,7 @@ while (($# > 0)); do
   esac
 done
 
-for command_name in docker jq; do
+for command_name in docker jq sha256sum; do
   command -v "${command_name}" >/dev/null 2>&1 || {
     echo "ERROR: Required command not found: ${command_name}" >&2
     exit 1
@@ -81,20 +81,21 @@ done
 if [[ "${LOCK_FILE}" != /* ]]; then
   LOCK_FILE="${REPO_ROOT}/${LOCK_FILE}"
 fi
-if [[ -f "${LOCK_FILE}" ]]; then
-  IMAGE_REF="${IMAGE_REF:-$(jq -er '.images.dod.reference' "${LOCK_FILE}")}"
-  PLATFORM="${PLATFORM:-$(jq -er '.config.images.platform' "${LOCK_FILE}")}"
-  REMOTE_USER="${REMOTE_USER:-$(jq -er '.config.user.name' "${LOCK_FILE}")}"
-  initial_uid="$(jq -er '.config.user.uid | tostring' "${LOCK_FILE}")"
-  initial_gid="$(jq -er '.config.user.gid | tostring' "${LOCK_FILE}")"
-else
-  initial_uid=1000
-  initial_gid=1000
-fi
+[[ -f "${LOCK_FILE}" ]] || {
+  echo "ERROR: Wolfi build lock is missing: ${LOCK_FILE}" >&2
+  exit 1
+}
+# shellcheck source=scripts/wolfi/lib.sh
+source "${REPO_ROOT}/scripts/wolfi/lib.sh"
+IMAGE_REF="${IMAGE_REF:-$(jq -er '.images.dod.reference' "${LOCK_FILE}")}"
+PLATFORM="${PLATFORM:-$(jq -er '.config.images.platform' "${LOCK_FILE}")}"
+REMOTE_USER="${REMOTE_USER:-$(jq -er '.config.user.name' "${LOCK_FILE}")}"
+initial_uid="$(jq -er '.config.user.uid | tostring' "${LOCK_FILE}")"
+initial_gid="$(jq -er '.config.user.gid | tostring' "${LOCK_FILE}")"
 
-: "${IMAGE_REF:?ERROR: --image is required when no Wolfi lockfile is available.}"
-: "${PLATFORM:?ERROR: --platform is required when no Wolfi lockfile is available.}"
-: "${REMOTE_USER:?ERROR: --user is required when no Wolfi lockfile is available.}"
+: "${IMAGE_REF:?ERROR: Wolfi image reference is empty.}"
+: "${PLATFORM:?ERROR: Wolfi platform is empty.}"
+: "${REMOTE_USER:?ERROR: Wolfi remote user is empty.}"
 
 case "${PLATFORM}" in
   linux/amd64|linux/arm64) ;;
@@ -128,6 +129,7 @@ docker image inspect "${IMAGE_REF}" >/dev/null 2>&1 || {
   echo "ERROR: Wolfi DOD image is not available locally: ${IMAGE_REF}" >&2
   exit 1
 }
+wolfi_verify_image_lock "${IMAGE_REF}" "${LOCK_FILE}"
 
 actual_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${IMAGE_REF}")"
 actual_user="$(docker image inspect --format '{{.Config.User}}' "${IMAGE_REF}")"
@@ -448,7 +450,7 @@ for identity in "${IDENTITIES[@]}"; do
       image: $image,
       workspaceMount: $workspace_mount,
       workspaceFolder: $workspace_folder,
-      runArgs: ["--platform", $platform],
+      runArgs: ["--platform", $platform, "--network", "none"],
       overrideCommand: true,
       shutdownAction: "none"
     }' > "${config_file}"

@@ -128,6 +128,7 @@ jq -e '.schemaVersion == 1 and (.config | type == "object")' "${LOCK_FILE}" >/de
 # shellcheck source=scripts/wolfi/lib.sh
 source "${REPO_ROOT}/scripts/wolfi/lib.sh"
 wolfi_verify_lock "${REPO_ROOT}" "${CONFIG_FILE}" "${LOCK_FILE}"
+LOCK_SHA256="$(wolfi_lock_sha256 "${LOCK_FILE}")"
 
 IMAGE_REF="${IMAGE_REF:-$(jq -er '.images.vscode.reference' "${LOCK_FILE}")}"
 BASE_IMAGE="${BASE_IMAGE:-$(jq -er '.images.dod.reference' "${LOCK_FILE}")}"
@@ -416,6 +417,7 @@ if ! docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
   echo "ERROR: Wolfi DOD base image is not available locally: ${BASE_IMAGE}" >&2
   exit 1
 fi
+wolfi_verify_image_lock "${BASE_IMAGE}" "${LOCK_FILE}"
 
 mkdir -p "${REPO_ROOT}/.tmp"
 BUILD_WORKSPACE="$(mktemp -d "${REPO_ROOT}/.tmp/wolfi-base-vscode.XXXXXXXX")"
@@ -432,6 +434,7 @@ cp -a "${SOURCE_ROOT}/." "${BUILD_WORKSPACE}/"
 generated_config="${BUILD_WORKSPACE}/.devcontainer/devcontainer.json"
 jq \
   --arg base_image "${BASE_IMAGE}" \
+  --arg lock_sha256 "${LOCK_SHA256}" \
   --arg remote_user "${REMOTE_USER}" \
   --arg commit "${VSCODE_COMMIT}" \
   --arg quality "${VSCODE_QUALITY}" \
@@ -446,6 +449,7 @@ jq \
   --arg extensions_artifacts "${EXTENSIONS_ARTIFACTS}" \
   --arg helpers_context "${HELPERS_CONTEXT}" \
   '.build.args.BASE_IMAGE = $base_image
+   | .build.args.WOLFI_LOCK_SHA256 = $lock_sha256
    | .build.args.REMOTE_USER = $remote_user
    | .build.args.VSCODE_COMMIT = $commit
    | .build.args.VSCODE_QUALITY = $quality
@@ -470,6 +474,7 @@ echo "Building Wolfi VS Code image offline:"
 echo "  image:               ${IMAGE_REF}"
 echo "  base:                ${BASE_IMAGE}"
 echo "  platform:            ${PLATFORM}"
+echo "  lock SHA256:         ${LOCK_SHA256}"
 echo "  VS Code commit:      ${VSCODE_COMMIT}"
 echo "  server artifacts:    ${SERVER_ARTIFACTS}"
 echo "  extension artifacts: ${EXTENSIONS_ARTIFACTS}"
@@ -484,6 +489,7 @@ devcontainer build \
 actual_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${IMAGE_REF}")"
 actual_user="$(docker image inspect --format '{{.Config.User}}' "${IMAGE_REF}")"
 metadata="$(docker image inspect --format '{{index .Config.Labels "devcontainer.metadata"}}' "${IMAGE_REF}")"
+wolfi_verify_image_lock "${IMAGE_REF}" "${LOCK_FILE}"
 
 [[ "${actual_platform}" == "${PLATFORM}" ]] || {
   echo "ERROR: Built image platform is ${actual_platform}, expected ${PLATFORM}." >&2

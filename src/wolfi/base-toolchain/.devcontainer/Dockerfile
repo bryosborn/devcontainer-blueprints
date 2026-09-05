@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=devcontainers/wolfi-base-vscode:0.1.0
 FROM ${BASE_IMAGE} AS core
 
+ARG WOLFI_LOCK_SHA256
 ARG REMOTE_USER=vscode
 ARG WOLFI_APK_ARCHITECTURE=x86_64
 ARG WOLFI_APK_REPOSITORY_SUBDIRS="repositories/main repositories/extra"
@@ -32,6 +33,12 @@ USER root
 # caches are bind-mounted and therefore never become image layers.
 RUN --mount=type=bind,from=wolfi_apks,source=/,target=/mnt/wolfi-apks,ro \
     --mount=type=bind,source=scripts/install-apks.sh,target=/tmp/install-wolfi-apks.sh,ro \
+    if [ "${#WOLFI_LOCK_SHA256}" -ne 64 ]; then \
+      echo "ERROR: WOLFI_LOCK_SHA256 must be the exact 64-character lock digest." >&2; exit 1; \
+    fi; \
+    case "${WOLFI_LOCK_SHA256}" in \
+      *[!0-9a-f]*) echo "ERROR: WOLFI_LOCK_SHA256 is not lowercase hexadecimal." >&2; exit 1 ;; \
+    esac; \
     if [ "${WOLFI_INSTALL_CORE_APKS}" = true ]; then \
       /bin/sh /tmp/install-wolfi-apks.sh \
         --mirror /mnt/wolfi-apks \
@@ -95,7 +102,8 @@ ENV JAVA_HOME=/opt/java \
     CARGO_HOME=/home/${REMOTE_USER}/.cargo \
     PATH="/home/${REMOTE_USER}/.cargo/bin:/usr/local/cargo/bin:${PATH}"
 
-LABEL devcontainers.wolfi.toolchain.variant="core"
+LABEL devcontainers.wolfi.lock.sha256="${WOLFI_LOCK_SHA256}" \
+      devcontainers.wolfi.toolchain.variant="core"
 
 USER ${REMOTE_USER}
 WORKDIR /workspaces

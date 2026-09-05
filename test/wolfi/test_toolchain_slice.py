@@ -15,6 +15,7 @@ DOCKERFILE = SOURCE_ROOT / ".devcontainer" / "Dockerfile"
 DEVCONTAINER = SOURCE_ROOT / ".devcontainer" / "devcontainer.json"
 BUILD_SCRIPT = SOURCE_ROOT / "scripts" / "build-image.sh"
 TEST_SCRIPT = SOURCE_ROOT / "scripts" / "test-image.sh"
+TOP_LEVEL_TEST_SCRIPT = REPO_ROOT / "scripts" / "wolfi" / "test-all.sh"
 
 
 class WolfiToolchainContracts(unittest.TestCase):
@@ -59,6 +60,14 @@ class WolfiToolchainContracts(unittest.TestCase):
         self.assertIn("--rust-archive-sha256", help_result.stdout)
         self.assertIn("--kubectl-hash", help_result.stdout)
 
+    def test_full_suite_exercises_the_frozen_apk_install(self) -> None:
+        content = TOP_LEVEL_TEST_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn(
+            'src/wolfi/apk-artifacts/scripts/test-offline-install.sh', content
+        )
+        self.assertIn('--config-sha256 "${CONFIG_HASH}"', content)
+        self.assertIn('--artifact-root "${ARTIFACT_ROOT}"', content)
+
     def test_optional_yaml_tools_control_targets_and_install_steps(self) -> None:
         build = BUILD_SCRIPT.read_text(encoding="utf-8")
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
@@ -71,6 +80,21 @@ class WolfiToolchainContracts(unittest.TestCase):
         self.assertIn('if [ "${WOLFI_INSTALL_RUST}" = true ]', dockerfile)
         self.assertIn('if [ "${WOLFI_INSTALL_NATIVE_TOOLS}" = true ]', dockerfile)
         self.assertIn(".config.toolchain.helm // empty", tests)
+
+    def test_all_toolchain_targets_inherit_exact_lock_provenance(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+        build = BUILD_SCRIPT.read_text(encoding="utf-8")
+        tests = TEST_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("ARG WOLFI_LOCK_SHA256", dockerfile)
+        self.assertIn(
+            'LABEL devcontainers.wolfi.lock.sha256="${WOLFI_LOCK_SHA256}"',
+            dockerfile,
+        )
+        self.assertIn("LOCK_SHA256=\"$(wolfi_lock_sha256", build)
+        self.assertIn('--build-arg "WOLFI_LOCK_SHA256=${LOCK_SHA256}"', build)
+        self.assertIn('wolfi_verify_image_lock "${BASE_IMAGE}"', build)
+        self.assertIn('wolfi_verify_image_lock "${output_image}"', build)
+        self.assertIn('wolfi_verify_image_lock "${image}"', tests)
 
     def test_rust_payload_is_hardened_but_cargo_state_is_user_writable(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")

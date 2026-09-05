@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -351,10 +352,10 @@ def generate_rust_source(
             encoding="utf-8",
         )
         toolchain_env.write_text(
-            f"TOOLCHAIN_ARTIFACT_ROOT={destination.as_posix()}\n"
+            f"TOOLCHAIN_ARTIFACT_ROOT={shlex.quote(destination.as_posix())}\n"
             "TOOLCHAIN_TEST_BASE_IMAGE=${UPSTREAM_BASE_IMAGE}\n"
-            f"RUST_TOOLCHAIN={rust['toolchain']}\n"
-            f"RUST_COMPONENTS={' '.join(rust['components'])}\n"
+            f"RUST_TOOLCHAIN={shlex.quote(rust['toolchain'])}\n"
+            f"RUST_COMPONENTS={shlex.quote(' '.join(rust['components']))}\n"
             "RUSTUP_HOME=/usr/local/rustup\n"
             "CARGO_HOME=/usr/local/cargo\n"
             "RUSTUP_INIT_VERSION=1.29.1\n"

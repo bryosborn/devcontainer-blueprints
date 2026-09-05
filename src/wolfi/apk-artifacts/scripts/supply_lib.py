@@ -8,7 +8,9 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tarfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -203,36 +205,65 @@ def download(
             return expected_sha256, True
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
     request = urllib.request.Request(
         url, headers={"User-Agent": "devcontainer-blueprints-wolfi-lock/1"}
     )
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response, temporary.open(
-            "wb"
-        ) as output:
-            if response.geturl() != url:
-                redirected = urllib.parse.urlsplit(response.geturl())
-                if redirected.scheme != "https":
-                    raise SupplyError(f"artifact download redirected away from HTTPS: {url}")
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
-        actual = sha256_file(temporary)
-        if expected_sha256 is not None and actual != expected_sha256:
-            raise SupplyError(
-                f"checksum mismatch for {url}: expected {expected_sha256}, got {actual}"
+    last_error: OSError | urllib.error.URLError | None = None
+    for attempt in range(5):
+        temporary = destination.with_name(
+            f".{destination.name}.{uuid.uuid4().hex}.tmp"
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response, temporary.open(
+                "wb"
+            ) as output:
+                if response.geturl() != url:
+                    redirected = urllib.parse.urlsplit(response.geturl())
+                    if redirected.scheme != "https":
+                        raise SupplyError(
+                            f"artifact download redirected away from HTTPS: {url}"
+                        )
+                downloaded_size = 0
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    downloaded_size += len(chunk)
+                declared_size = response.headers.get("Content-Length")
+                if declared_size is not None:
+                    try:
+                        expected_size = int(declared_size)
+                    except ValueError as error:
+                        raise SupplyError(
+                            f"artifact server returned an invalid Content-Length: {url}"
+                        ) from error
+                    if downloaded_size != expected_size:
+                        raise OSError(
+                            f"truncated response: expected {expected_size} bytes, "
+                            f"received {downloaded_size}"
+                        )
+            actual = sha256_file(temporary)
+            if expected_sha256 is not None and actual != expected_sha256:
+                raise SupplyError(
+                    f"checksum mismatch for {url}: expected {expected_sha256}, got {actual}"
+                )
+            os.replace(temporary, destination)
+            return actual, False
+        except (OSError, urllib.error.URLError) as error:
+            last_error = error
+            if attempt == 4:
+                break
+            delay = 2**attempt
+            print(
+                f"Retrying {url} after transient download error ({attempt + 1}/5): "
+                f"{error}",
+                file=sys.stderr,
             )
-        os.replace(temporary, destination)
-        return actual, False
-    except (OSError, urllib.error.URLError) as error:
-        if isinstance(error, SupplyError):
-            raise
-        raise SupplyError(f"unable to download {url}: {error}") from error
-    finally:
-        temporary.unlink(missing_ok=True)
+            time.sleep(delay)
+        finally:
+            temporary.unlink(missing_ok=True)
+    raise SupplyError(f"unable to download {url}: {last_error}") from last_error
 
 
 def parse_pkginfo(path: Path) -> dict[str, Any]:
@@ -243,7 +274,7 @@ def parse_pkginfo(path: Path) -> dict[str, Any]:
             if source is None:
                 raise KeyError(".PKGINFO")
             content = source.read().decode("utf-8")
-    except (OSError, tarfile.TarError, KeyError, UnicodeDecodeError) as error:
+    except (OSError, EOFError, tarfile.TarError, KeyError, UnicodeDecodeError) as error:
         raise SupplyError(f"unable to read .PKGINFO from {path}: {error}") from error
 
     metadata: dict[str, Any] = {"provides": []}

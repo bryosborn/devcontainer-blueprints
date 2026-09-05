@@ -309,7 +309,7 @@ function normalizeToolchain(value) {
 
   if (hasOwn(toolchain, "rust")) {
     const rust = recordAt(toolchain.rust, "toolchain.rust", ["toolchain", "components"]);
-    const allowedComponents = new Set(["rust-src", "rustfmt", "clippy"]);
+    const allowedComponents = new Set(["rust-src", "rust-analyzer", "rustfmt", "clippy"]);
     const components = uniqueArrayAt(rust.components, "toolchain.rust.components", selectorAt, {
       minItems: 1,
       maxItems: allowedComponents.size

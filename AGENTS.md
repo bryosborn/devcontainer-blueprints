@@ -14,6 +14,16 @@ local template
   -> usable scratch devcontainer
 ```
 
+Maintain a parallel Wolfi evaluation flow without changing the Ubuntu defaults:
+
+```text
+locked Wolfi base and signed APK supply
+  -> wolfi-base-dod
+  -> wolfi-base-vscode
+  -> wolfi-base-toolchain plus native-tool probes
+  -> raw Ubuntu/Wolfi CVE and size comparison
+```
+
 Keep the concepts separate:
 
 ```text
@@ -39,11 +49,26 @@ Default config:      config/docker.env
 Docker platform:     linux/amd64
 ```
 
+Wolfi concrete names:
+
+```text
+Config:               config/wolfi-build.yaml
+Generated lock:       config/wolfi-build.lock.json
+Artifact root:        artifacts/wolfi
+DOD image:            devcontainers/wolfi-base-dod:0.1.0
+VS Code image:        devcontainers/wolfi-base-vscode:0.1.0
+Toolchain image:      devcontainers/wolfi-base-toolchain:0.1.0
+Wolfi platform:       linux/amd64
+```
+
 ## Repository Map
 
 - `README.md`: User-facing workflow and explanation.
+- `docs/wolfi.md`: Detailed Wolfi configuration, locking, offline workflow, DOD security, tool, scan, architecture, and limitation guide.
 - `.devcontainer/`: Bootstrap development container for working on this repo.
 - `config/docker.env`: Default online-machine Docker image coordinates and build switches.
+- `config/wolfi-build.yaml`: The sole human-authored Wolfi image, platform, identity, VS Code/extension, and tool selection file.
+- `config/wolfi-build.lock.json`: Generated Wolfi lock containing normalized configuration, immutable image/artifact resolution, exact hashes, and resolver provenance.
 - `scripts/env.sh`: Shared env-file loading, required-variable checks, and image-ref helpers.
 - `scripts/prefetch-all.sh`: Online-machine wrapper for all artifact prefetch steps.
 - `scripts/build-all.sh`: Online-machine wrapper for the DOD, VS Code, and toolchain image builds.
@@ -85,11 +110,19 @@ Docker platform:     linux/amd64
 - `src/base-toolchain/`: Composed image layer extending `BASE_VSCODE_IMAGE` with selected APT and toolchain artifacts installed offline; it inherits but does not extract the VSIX archive.
 - `src/base-toolchain/scripts/build-image.sh`: Builds `BASE_TOOLCHAIN_IMAGE` with `docker build --network=none` and named BuildKit artifact contexts.
 - `src/base-toolchain/scripts/test-image.sh`: Smoke tests the composed image, including Python 3.12/3.13, Java/Maven, Node, selected CLI/MongoDB tools, the VS Code Server/uninstalled archive, and DOD CLI-only behavior.
+- `scripts/wolfi/`: Wolfi config/lock utilities and top-level update, frozen-prefetch, build, test, scan, and comparison wrappers.
+- `src/wolfi/apk-artifacts/`: Signed Wolfi Main/Extra index, key, exact APK closure, digest-pinned base-image materialization, frozen verification, and offline-install tests.
+- `src/wolfi/vendor-artifacts/`: Locked VS Code, extension, kubectl, and Rust resolver/frozen-verifier implementation.
+- `src/wolfi/base-dod/`: Native Wolfi Docker CLI image and the package-free local runtime Feature that owns the socket mount/proxy entrypoint.
+- `src/wolfi/base-vscode/`: Wolfi VS Code Server layer with both server layouts and an uninstalled extension archive.
+- `src/wolfi/base-toolchain/`: Selected native Wolfi toolchain, default final image, four native-tool probes, and offline smoke fixtures.
+- `test/wolfi/`: Focused static tests for the Wolfi VS Code, toolchain, scan, and comparison contracts.
 
 ## Design Rules
 
 - Keep this first version minimal.
-- Do not add GitHub Actions, GHCR publishing, custom Dev Container Features, Docker-in-Docker, Compose services, language stacks, or enterprise registry plumbing yet.
+- Wolfi is a parallel evaluation path. Unless a rule below says otherwise, do not retrofit Wolfi choices into the Ubuntu workflow.
+- For the original Ubuntu skeleton, do not add GitHub Actions, GHCR publishing, custom Dev Container Features, Docker-in-Docker, Compose services, or enterprise registry plumbing.
 - The target base family is the rolling `mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04` tag.
 - `base-dod` is the built image containing only Docker-outside-of-Docker installed through the Dev Container Feature installer.
 - `base-vscode` is the first actual Dev Container Template boundary; it should reuse `BASE_IMAGE` and bake the configured VS Code Server commit.
@@ -99,6 +132,7 @@ Docker platform:     linux/amd64
 - VS Code extension downloads happen only in `src/base-vscode/scripts/prefetch-extensions.sh` / `.mjs`; prefetch packages all locked server/client VSIX files, and image builds copy the verified archive to the remote user's home without extracting or installing it.
 - VS Code extension lockfiles should record exact versions, target platform, SHA256, install order, extension kind classification, host-only extensions, built-in dependencies, and warnings.
 - No VS Code extensions are installed in the images. Workspace-capable extensions are archived under `server/`, and UI-only/host-only extensions are archived under `client/`.
+- VSIX archive packaging must normalize member order, timestamps, numeric ownership, directory/file modes, and gzip metadata so identical locked inputs produce byte-identical archives regardless of caller umask.
 - WSL bootstrap artifacts should live under `artifacts/wsl/` and be verified by `src/wsl-artifacts/scripts/test-artifacts.sh`; they are transfer payloads, not Linux container image-installed files.
 - The Dev Containers bootstrap container image used by `Clone Repository in Container Volume` is extension-owned: for `ms-vscode-remote.remote-containers` 0.461.0 it builds `vsc-volume-bootstrap` from the VSIX's `extension/scripts/bootstrap.Dockerfile`, based on `mcr.microsoft.com/devcontainers/base:0-alpine-3.20`. Prefetch should save that Docker image tar and setup should load it, verify the saved versioned tag exists locally, set `dev.containers.bootstrapImage` to that tag, and set `dev.containers.bootstrapImagePull=false`.
 - Keep the WSL setup entry point in top-level `scripts/` so a disconnected Windows host has one obvious setup script after unpacking the repo and artifacts.
@@ -128,6 +162,33 @@ Docker platform:     linux/amd64
 - Personal `.env` and `*.local.env` files are ignored by git and can be used with `DOCKER_ENV_FILE`.
 - The template ID does not need to match any Docker image name.
 
+### Wolfi Evaluation Rules
+
+- `config/wolfi-build.yaml` is the only hand-edited Wolfi parameter file. Tool-key presence means enabled; keep internal APK mappings out of it.
+- `config/wolfi-build.lock.json` is generated and committed. Never hand-edit its hashes, versions, URLs, digests, normalized config, or resolver metadata.
+- `scripts/wolfi/update-lock.sh` is the only mutable-resolution command. Frozen prefetch/build/test commands must reject YAML/lock drift and must not select a newer artifact implicitly.
+- Every Wolfi final and probe image must carry the exact complete-lock bytes SHA256 in `devcontainers.wolfi.lock.sha256`. Downstream builds, tests, and scans must reject a missing or mismatched label rather than accepting a stale tag.
+- Resolve the base tag to the configured platform digest and retain its verified image tar. Keep exact APKs, original signed indexes, and trusted key fingerprints in platform-qualified artifacts.
+- Seed APK closure resolution with the digest-pinned base image's exact `/etc/apk/world`; an empty simulated world can select newer rolling-index revisions that do not match packages already installed in the immutable base. Offline install tests should retain the base world and installed database and compare the base-plus-closure result.
+- Keep Wolfi Main and Extra separate and never mix Alpine packages into the Wolfi repository snapshot. Never use `--allow-untrusted`, ignored signatures, `curl --insecure`, or blank lock hashes.
+- All artifact-consuming image builds use `--network=none`. The frozen prefetch may download a missing file only from its exact locked URL and must reject changed bytes.
+- Keep frozen artifact retries bounded. A locked APK or vendor byte re-fetch may retry transient failures at most five times with finite timeouts/backoff, but non-HTTPS redirects and locked-hash mismatches remain fatal; never promote partial bytes or mutate the lock during frozen prefetch.
+- The Wolfi DOD image uses native `docker-cli`, Buildx, and Compose packages without a daemon. The package-free local socket-runtime Feature is the sole intentional exception to the repository's no-custom-Feature rule.
+- Preserve the DOD identity contract: named OCI/remote user `vscode`, `containerUser=root`, initial `1000:1000`, `updateRemoteUserUID=true`, writable `/home/vscode`, root-owned `/opt` and `/workspaces`, and `init=true`.
+- Proxy `/var/run/docker-host.sock` to identity-owned `/var/run/docker.sock`; never modify the source socket. Resolve the post-update UID/GID at startup and keep target mode `0660`.
+- Keep Helm 4, ORAS, mongosh, and MongoDB Database Tools enabled in the default Wolfi YAML during evaluation. Build the core and one-tool probe variants so their size/CVE effects are measured rather than inferred.
+- Keep ClamAV out of the default Wolfi final image while the signed target Main index provides only `1.5.2-r7`; Trivy reports seven unique High CVEs (56 split-package occurrences) fixed in the unavailable `1.5.4-r0`. Re-enable `toolchain.clamav: "1.5"` only after the signed target index resolves every selected ClamAV package to the fixed build or newer, then rerun the full frozen build, test, and raw scan gate. Do not add an ignore or vendor fallback.
+- Use native Wolfi packages for the toolchain where selected. kubectl and Rust remain the toolchain's downloaded vendor artifacts; VS Code Server and VSIX files are separately locked inputs to the VS Code layer.
+- Keep `rust-analyzer` in the locked Rust component list while the `rust-lang.rust-analyzer` VSIX is selected. The network-disabled component smoke must locate it through `rustup`, run it, and receive an LSP initialize response; do not leave offline activation dependent on a language-server download.
+- Do not extract or install the extension archive in delivered images. Keep the Ubuntu font set, X11, ffmpeg, and broad GUI/Electron package collection out of Wolfi.
+- Wolfi scans use raw findings as the primary view and one frozen Trivy/DB/options context for both image families. Ubuntu's header-package policy output is separate; add no Wolfi ignore without a reachability or VEX justification.
+- Release/raw scans must clear ambient `TRIVY_*` variables, use explicit empty Trivy config and ignore files, and select all severities plus unfixed findings. A comparison may report `PASS` only from an evaluated acceptance result whose image manifest and counts match the verified raw reports.
+- Locked comparison must re-read the current Wolfi lock and verify its exact bytes SHA256, platform, ordered final-image roles, and lock-derived core/configured-probe manifest against the scan suite and raw reports. A default locked scan must fail if any required core/probe image is absent; custom scans cannot claim complete native-tool equivalence.
+- Admit the disposable Ubuntu all-tools comparator only through its current-input local provenance and immutable scanned image ID. Its derived APT roots must match Wolfi's ClamAV enablement; while Wolfi omits ClamAV, remove only the exact Ubuntu `clamav` root and verify `clamscan` is absent.
+- A normal Wolfi scan fails on any raw Critical or High occurrence in the three final images. Lower-severity findings still require explicit review; do not claim acceptance from build/test success alone.
+- One Wolfi lock and the local image tags describe one platform at a time. Keep artifacts platform-qualified, process AMD64 and ARM64 sequentially, and archive reports/locks before switching.
+- WSL is outside the Wolfi path. Preserve the existing Ubuntu WSL workflow rather than partially duplicating it.
+
 ## Usual Commands
 
 Static checks:
@@ -149,6 +210,29 @@ Current online preparation:
 ./scripts/test-all.sh
 ./scripts/scan-images-trivy.sh
 ./scripts/package-artifacts.sh
+```
+
+Wolfi connected refresh and frozen workflow:
+
+```bash
+npm ci
+./scripts/wolfi/update-lock.sh
+./scripts/wolfi/prefetch-all.sh
+./scripts/wolfi/build-all.sh
+./scripts/wolfi/test-all.sh
+./scripts/wolfi/scan.sh
+./scripts/wolfi/compare.sh
+```
+
+Wolfi-focused static checks:
+
+```bash
+npm run test:wolfi-config
+python3 test/wolfi/test_base_vscode_layer.py
+python3 test/wolfi/test_toolchain_slice.py
+python3 test/wolfi/test_scan_and_compare.py
+find scripts/wolfi src/wolfi -type f -name '*.sh' -print0 | sort -z | xargs -0 -n1 bash -n
+find scripts/wolfi src/wolfi -type f -name '*.sh' -print0 | sort -z | xargs -0 shellcheck -x
 ```
 
 Generated local state cleanup:
@@ -254,3 +338,27 @@ Current lessons:
 - 2026-09-04 - Finding: Removing `ffmpeg`, Helm, ORAS, MongoDB Database Tools, and installed VS Code extensions reduced `base-toolchain` Trivy findings from 1067 to 263, including critical findings from 15 to 0 and high findings from 156 to 9; `base-dod` and `base-vscode` remained at 203 findings each.
 - 2026-09-04 - Decision: `config/toolchain.env` is the sole source of defaults for the granular Helm, ORAS, and MongoDB Database Tools install flags; production and test Dockerfiles declare those build args without fallback values.
 - 2026-09-04 - Decision: Copy `install-vscode-extensions.sh` beside the VSIX archive in `/home/vscode`; user invocation verifies the archive, installs server extensions, extracts client-only VSIX files for transfer, and leaves image builds extension-free.
+- 2026-09-04 - Decision: Wolfi uses one strict human-authored `config/wolfi-build.yaml` plus a generated committed lock; only `scripts/wolfi/update-lock.sh` may resolve mutable selectors, and tool-key presence controls enablement.
+- 2026-09-04 - Decision: The Wolfi frozen supply retains a digest-pinned base image plus separate Main/Extra signed indexes, trusted key fingerprints, exact APK closures, URLs, and hashes beneath a platform-qualified artifact directory.
+- 2026-09-04 - Finding: Resolver containers cannot bind a path inside this workspace when `/workspaces` is a Docker named volume; use Docker create/copy/start flows so the sibling daemon receives real files rather than an empty host path.
+- 2026-09-04 - Decision: Wolfi DOD uses native Docker CLI/Buildx/Compose packages and a package-free local Feature that proxies the untouched host socket to a mode-`0660` socket owned by the post-adjustment `vscode` UID/GID.
+- 2026-09-04 - Finding: Wolfi's virtual `posix-libc-utils` root resolves through installable provider records, so the lock preserves the requested root and exact provider rather than assuming the virtual name is an APK filename.
+- 2026-09-04 - Finding: The current native `mongosh` APK is labeled `2.10.0-r1` but reports runtime `2.9.1`; retain and report both during evaluation instead of silently replacing the package with a vendor download.
+- 2026-09-04 - Decision: Wolfi CVE comparison scans both families with one frozen Trivy database/options context, leaves Wolfi raw results unignored, emits Ubuntu's header-package policy separately, and skips the opaque VSIX archive equally by default.
+- 2026-09-04 - Caveat: Wolfi artifact payloads are platform-qualified, but the generated lock, local image tags, and default report directories represent one architecture at a time; archive results and process AMD64/ARM64 sequentially.
+- 2026-09-04 - Caveat: The Wolfi test proves the packaged server starts without a download, verifies extension install/list/client-VSIX extraction, and exercises representative DAP/native/LSP services including Rust Analyzer; it does not claim a real managed-desktop connection or full VS Code extension-host activation.
+- 2026-09-04 - Finding: The signed x86_64 Wolfi Main index resolved all eight installed ClamAV 1.5 split packages to `1.5.2-r7`; Trivy attributed seven unique High CVEs and 56 final-image occurrences to them, with `1.5.4-r0` listed as fixed but not yet present in Main or Extra.
+- 2026-09-04 - Decision: Temporarily omit `toolchain.clamav` from the default Wolfi profile rather than ignore the findings or use a vendor fallback; restore the native `"1.5"` selector only after the signed target index supplies the fixed build, then refresh, rebuild, test, and rescan.
+- 2026-09-04 - Finding: Resolving package roots against an empty APK world can upgrade packages beyond the revisions installed in the digest-pinned base; copying that base's exact `/etc/apk/world` keeps the frozen closure aligned with the immutable starting filesystem.
+- 2026-09-04 - Decision: Lock `rust-analyzer` as a Rust toolchain component and require its native server to answer LSP initialize with networking disabled, so the archived Rust Analyzer VSIX has no activation-time server download dependency.
+- 2026-09-04 - Decision: Frozen artifact re-downloads are limited to five attempts with finite timeouts and backoff; temporary content is promoted only after strict transport, completeness where advertised, and SHA256 checks pass.
+- 2026-09-04 - Finding: Marketplace target-platform queries can still return several platform payloads for one version, and shared asset URLs can default to the wrong OS; filter each version record by its own `targetPlatform`, add that selector to platform-specific download URLs, and verify cpptools' ELF machine before accepting the VSIX.
+- 2026-09-04 - Decision: Trivy scan metadata records immutable Docker image IDs plus vulnerability-report and SBOM SHA256 values; invalidate old metadata before scanning and reject missing, stale, identity-mismatched, or byte-modified results during normal comparison.
+- 2026-09-05 - Decision: Stamp every Wolfi final/probe image with the exact lockfile-bytes SHA256 and verify that label at downstream build, test, and pristine-scan boundaries so a moved local tag cannot claim another lock's provenance.
+- 2026-09-05 - Decision: Raw/release Trivy scans clear all ambient `TRIVY_*` settings and explicitly use `/dev/null` config/ignore files, all severities, and unfixed findings; comparison reports `PASS` only when the evaluated gate agrees with verified final-image reports and counts.
+- 2026-09-05 - Decision: The disposable Ubuntu all-tools comparison uses deterministic local provenance over configs, effective APT roots, artifacts, recipe, source/payload images, filesystem, Wolfi lock, and scanned image ID; its ClamAV presence follows the Wolfi profile exactly.
+- 2026-09-05 - Finding: The remaining reviewed Wolfi findings are Medium `GHSA-7gcf-g7xr-8hxj` (`serde_with` 3.18.0) and Low `GHSA-cq8v-f236-94qc` (`rand` 0.9.2) in dormant `rust-src` Cargo lockfiles, not dependencies contributed by the four native-tool probes.
+- 2026-09-05 - Decision: Re-read the current Wolfi lock during comparison and require its exact bytes hash, ordered final roles, and complete lock-derived core/probe manifest; missing configured probes fail the default scan and cannot be presented as a complete equivalent assessment.
+- 2026-09-05 - Decision: Normalize VSIX archive member order, epoch timestamps, numeric ownership, `0755` directories, `0644` files, and gzip metadata; unset ambient `TAR_OPTIONS`/`GZIP` and select gzip level explicitly so identical locked inputs package byte-for-byte identically across environments.
+- 2026-09-05 - Decision: The Wolfi socket proxy suite explicitly covers a root-owned colliding GID, an unmapped arbitrary GID, and a user-owned rootless-style source path while proving that only the proxy-owned target is normalized.
+- 2026-09-05 - Decision: Quarantine prior Wolfi comparison output before validation and long-running metrics, then publish a fully staged directory; a failed or interrupted run must leave no stale canonical `PASS` while retaining the explicitly non-current backup for recovery.

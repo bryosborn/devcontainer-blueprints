@@ -8,6 +8,29 @@ import semver from "semver";
 const MARKETPLACE_URL = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery";
 const VSIX_ASSET_TYPE = "Microsoft.VisualStudio.Services.VSIXPackage";
 const DEFAULT_ENV_FILE = "config/vscode-extensions.env";
+const NETWORK_ATTEMPTS = 5;
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function withNetworkRetries(description, operation) {
+  let lastError;
+  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (error?.retryable === false || attempt === NETWORK_ATTEMPTS) {
+        throw error;
+      }
+      const delay = 2 ** (attempt - 1) * 1000;
+      console.warn(`Retrying ${description} after transient error (${attempt}/${NETWORK_ATTEMPTS}): ${error.message}`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
 
 export function normalizeExtensionId(id) {
   return id.trim().toLowerCase();
@@ -313,21 +336,25 @@ async function marketplaceQuery(extensionId, targetPlatform) {
     flags: 243
   };
 
-  const response = await fetch(MARKETPLACE_URL, {
-    method: "POST",
-    headers: {
-      Accept: "application/json;api-version=3.0-preview.1",
-      "Content-Type": "application/json",
-      "User-Agent": "VSCode Offline Extension Prefetcher"
-    },
-    body: JSON.stringify(body)
+  return withNetworkRetries(`Marketplace query for ${extensionId}`, async () => {
+    const response = await fetch(MARKETPLACE_URL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json;api-version=3.0-preview.1",
+        "Content-Type": "application/json",
+        "User-Agent": "VSCode Offline Extension Prefetcher"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const error = new Error(`Marketplace query failed for ${extensionId}: HTTP ${response.status}`);
+      error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      throw error;
+    }
+
+    return response.json();
   });
-
-  if (!response.ok) {
-    throw new Error(`Marketplace query failed for ${extensionId}: HTTP ${response.status}`);
-  }
-
-  return response.json();
 }
 
 function extensionFromQueryResult(result, requestedId) {
@@ -364,6 +391,16 @@ function fileUrlForVersion(extension, version) {
   return `https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${encodeURIComponent(publisher)}/vsextensions/${encodeURIComponent(name)}/${encodeURIComponent(version.version)}/vspackage`;
 }
 
+function fileUrlForPlatform(extension, version, sourcePlatform) {
+  const url = new URL(fileUrlForVersion(extension, version));
+  if (sourcePlatform && sourcePlatform !== "universal") {
+    // Marketplace commonly returns the same asset URL for every platform
+    // record. Without this selector that URL can default to a different OS.
+    url.searchParams.set("targetPlatform", sourcePlatform);
+  }
+  return url.toString();
+}
+
 function candidateTargetPlatform(version, fallbackPlatform) {
   const direct = version.targetPlatform;
   if (direct) {
@@ -378,15 +415,22 @@ function candidateTargetPlatform(version, fallbackPlatform) {
   return property?.value ?? fallbackPlatform ?? "universal";
 }
 
-function collectCandidates(platformExtension, universalExtension, targetPlatform) {
+export function collectCandidates(platformExtension, universalExtension, targetPlatform) {
   let candidates = new Map();
 
-  function add(extension, sourcePlatform) {
+  function add(extension, fallbackPlatform) {
     if (!extension) {
       return;
     }
     for (const version of extension.versions ?? []) {
-      const key = `${version.version}|${sourcePlatform || "universal"}`;
+      // Marketplace target-platform queries can return every platform build
+      // for a release. Trust each version record rather than labeling the
+      // first returned payload with the platform used in the query.
+      const sourcePlatform = candidateTargetPlatform(version, fallbackPlatform);
+      if (sourcePlatform !== targetPlatform && sourcePlatform !== "universal") {
+        continue;
+      }
+      const key = `${version.version}|${sourcePlatform}`;
       if (!candidates.has(key)) {
         candidates.set(key, {
           extension,
@@ -394,7 +438,7 @@ function collectCandidates(platformExtension, universalExtension, targetPlatform
           versionString: version.version,
           sourcePlatform,
           targetPlatform: candidateTargetPlatform(version, sourcePlatform),
-          downloadUrl: fileUrlForVersion(extension, version)
+          downloadUrl: fileUrlForPlatform(extension, version, sourcePlatform)
         });
       }
     }
@@ -430,18 +474,68 @@ function collectCandidates(platformExtension, universalExtension, targetPlatform
   });
 }
 
-async function downloadFile(url, destination) {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "VSCode Offline Extension Prefetcher"
-    }
-  });
-  if (!response.ok) {
-    throw new Error(`Download failed: HTTP ${response.status} ${url}`);
+export function isElfForTargetPlatform(header, targetPlatform) {
+  const expectedMachine = {
+    "linux-x64": 62,
+    "linux-arm64": 183,
+  }[targetPlatform];
+  if (!expectedMachine) {
+    return false;
   }
 
+  const isElf = header.length >= 20 && header.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+  const isLittleEndian = header[5] === 1;
+  const machine = isLittleEndian ? header.readUInt16LE(18) : -1;
+  return isElf && isLittleEndian && machine === expectedMachine;
+}
+
+export function validateTargetNativePayload(requestedId, targetPlatform, vsixPath) {
+  if (normalizeExtensionId(requestedId) !== "ms-vscode.cpptools") {
+    return;
+  }
+
+  const expectedMachine = { "linux-x64": 62, "linux-arm64": 183 }[targetPlatform];
+  if (!expectedMachine) {
+    return;
+  }
+
+  // cpptools ships native services. Validate the primary executable before
+  // accepting the candidate so a mislabeled or incorrectly selected VSIX
+  // falls through to the next compatible Marketplace version.
+  const extractionRoot = fs.mkdtempSync(
+    path.join(path.dirname(vsixPath), "cpptools-native-check-"),
+  );
+  const executablePath = path.join(extractionRoot, "extension", "bin", "cpptools");
+  try {
+    execFileSync("unzip", ["-qq", vsixPath, "extension/bin/cpptools", "-d", extractionRoot], {
+      stdio: "pipe",
+    });
+    const header = fs.readFileSync(executablePath).subarray(0, 20);
+    if (!isElfForTargetPlatform(header, targetPlatform)) {
+      throw new Error(
+        `cpptools native payload is not ELF machine ${expectedMachine} for ${targetPlatform}`,
+      );
+    }
+  } finally {
+    fs.rmSync(extractionRoot, { recursive: true, force: true });
+  }
+}
+
+async function downloadFile(url, destination) {
   await fs.promises.mkdir(path.dirname(destination), { recursive: true });
-  const buffer = Buffer.from(await response.arrayBuffer());
+  const buffer = await withNetworkRetries(`VSIX download ${url}`, async () => {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "VSCode Offline Extension Prefetcher"
+      }
+    });
+    if (!response.ok) {
+      const error = new Error(`Download failed: HTTP ${response.status} ${url}`);
+      error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      throw error;
+    }
+    return Buffer.from(await response.arrayBuffer());
+  });
   await fs.promises.writeFile(destination, buffer);
 }
 
@@ -601,9 +695,14 @@ class ExtensionResolver {
       try {
         await downloadFile(candidate.downloadUrl, tempPath);
         const packageJson = validateVsix(tempPath);
+        validateTargetNativePayload(requestedId, this.options.targetPlatform, tempPath);
         const enginesVscode = packageJson.engines?.vscode ?? "";
         if (!isCompatibleWithVSCode(this.options.targetVscodeVersion, enginesVscode)) {
-          errors.push(`${candidate.versionString}: engines.vscode ${enginesVscode || "<missing>"} does not match VS Code ${this.options.targetVscodeVersion}`);
+          const reason = `engines.vscode ${enginesVscode || "<missing>"} does not match VS Code ${this.options.targetVscodeVersion}`;
+          errors.push(`${candidate.versionString}: ${reason}`);
+          console.warn(
+            `  rejected ${requestedId}@${candidate.versionString} (${candidate.sourcePlatform}): ${reason}`,
+          );
           fs.rmSync(tempPath, { force: true });
           continue;
         }
@@ -668,6 +767,9 @@ class ExtensionResolver {
       } catch (error) {
         fs.rmSync(tempPath, { force: true });
         errors.push(`${candidate.versionString}: ${error.message}`);
+        console.warn(
+          `  rejected ${requestedId}@${candidate.versionString} (${candidate.sourcePlatform}): ${error.message}`,
+        );
       }
     }
 

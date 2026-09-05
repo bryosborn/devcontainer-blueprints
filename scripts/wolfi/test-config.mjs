@@ -69,6 +69,7 @@ test("loads the repository Wolfi configuration", () => {
   assert.equal(validConfig.toolchain.oras, "1");
   assert.equal(validConfig.toolchain.mongosh, "2");
   assert.equal(validConfig.toolchain.mongodbDatabaseTools, "100");
+  assert.ok(validConfig.toolchain.rust.components.includes("rust-analyzer"));
   assert.equal(validConfig.vscode.extensions.length, 15);
 });
 
@@ -202,6 +203,12 @@ test("requires Maven and npm runtimes when those tools are enabled", () => {
   const withoutNode = clone(validConfig);
   delete withoutNode.toolchain.node;
   expectConfigError(() => validateWolfiConfig(withoutNode), /npm.*requires toolchain\.node/);
+});
+
+test("accepts only supported frozen Rust components", () => {
+  const config = clone(validConfig);
+  config.toolchain.rust.components[0] = "rust-docs";
+  expectConfigError(() => validateWolfiConfig(config), /unsupported component: rust-docs/);
 });
 
 test("rejects artifact paths that can escape the artifact root", () => {

@@ -123,6 +123,7 @@ done
 # shellcheck source=scripts/wolfi/lib.sh
 source "${REPO_ROOT}/scripts/wolfi/lib.sh"
 wolfi_verify_lock "${REPO_ROOT}" "${CONFIG_FILE}" "${LOCK_FILE}"
+LOCK_SHA256="$(wolfi_lock_sha256 "${LOCK_FILE}")"
 
 IMAGE_REF="${IMAGE_REF:-$(jq -er '.images.dod.reference' "${LOCK_FILE}")}"
 LOCKED_BASE_IMAGE="$(jq -er '
@@ -273,6 +274,7 @@ jq \
   --arg remote_user "${REMOTE_USER}" \
   --arg remote_uid "${REMOTE_UID}" \
   --arg remote_gid "${REMOTE_GID}" \
+  --arg lock_sha256 "${LOCK_SHA256}" \
   --arg repository_subdir "${REPOSITORY_SUBDIR}" \
   --arg packages "${PACKAGE_CONSTRAINTS}" \
   --arg apk_artifacts "${APK_ARTIFACTS}" \
@@ -280,6 +282,7 @@ jq \
    | .build.args.REMOTE_USER = $remote_user
    | .build.args.REMOTE_UID = $remote_uid
    | .build.args.REMOTE_GID = $remote_gid
+   | .build.args.WOLFI_LOCK_SHA256 = $lock_sha256
    | .build.args.WOLFI_APK_REPOSITORY_SUBDIR = $repository_subdir
    | .build.args.WOLFI_DOD_APK_PACKAGES = $packages
    | .build.options = ["--network=none", "--build-context", "wolfi_apks=" + $apk_artifacts]
@@ -292,6 +295,7 @@ echo "  image:       ${IMAGE_REF}"
 echo "  base:        ${BASE_IMAGE}"
 echo "  platform:    ${PLATFORM}"
 echo "  APK context: ${APK_ARTIFACTS}"
+echo "  lock SHA256: ${LOCK_SHA256}"
 echo "  user:        ${REMOTE_USER} (${REMOTE_UID}:${REMOTE_GID})"
 
 devcontainer build \
@@ -304,6 +308,7 @@ devcontainer build \
 actual_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${IMAGE_REF}")"
 actual_user="$(docker image inspect --format '{{.Config.User}}' "${IMAGE_REF}")"
 metadata="$(docker image inspect --format '{{index .Config.Labels "devcontainer.metadata"}}' "${IMAGE_REF}")"
+wolfi_verify_image_lock "${IMAGE_REF}" "${LOCK_FILE}"
 
 [[ "${actual_platform}" == "${PLATFORM}" ]] || {
   echo "ERROR: Built platform ${actual_platform} does not match ${PLATFORM}." >&2

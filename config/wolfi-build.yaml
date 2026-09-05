@@ -58,7 +58,9 @@ toolchain:
   maven: "3.9"
   node: "24"
   npm: "12"
-  clamav: "1.5"
+  # Temporarily disabled: Wolfi Main currently stops at 1.5.2-r7, while the
+  # first release fixing its seven High-severity CVEs is 1.5.4.
+  # clamav: "1.5"
   kubectl: "1.37.0"
   yq: "4"
   helm: "4"
@@ -69,5 +71,6 @@ toolchain:
     toolchain: nightly-2026-09-04
     components:
       - rust-src
+      - rust-analyzer
       - rustfmt
       - clippy

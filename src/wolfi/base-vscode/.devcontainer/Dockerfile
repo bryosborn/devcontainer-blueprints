@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=devcontainers/wolfi-base-dod:0.1.0
 FROM ${BASE_IMAGE}
 
+ARG WOLFI_LOCK_SHA256
 ARG REMOTE_USER=vscode
 ARG VSCODE_COMMIT
 ARG VSCODE_QUALITY=stable
@@ -17,6 +18,12 @@ USER root
 # exact locked package closure. apk is explicitly kept offline by the helper.
 RUN --mount=type=bind,from=wolfi_apks,source=/,target=/mnt/wolfi-apks,ro \
     --mount=type=bind,source=scripts/install-packages.sh,target=/tmp/install-wolfi-vscode-packages.sh,ro \
+    if [ "${#WOLFI_LOCK_SHA256}" -ne 64 ]; then \
+      echo "ERROR: WOLFI_LOCK_SHA256 must be the exact 64-character lock digest." >&2; exit 1; \
+    fi; \
+    case "${WOLFI_LOCK_SHA256}" in \
+      *[!0-9a-f]*) echo "ERROR: WOLFI_LOCK_SHA256 is not lowercase hexadecimal." >&2; exit 1 ;; \
+    esac; \
     /bin/sh /tmp/install-wolfi-vscode-packages.sh \
       --mirror /mnt/wolfi-apks \
       --architecture "${WOLFI_APK_ARCHITECTURE}" \
@@ -61,6 +68,8 @@ RUN --mount=type=bind,from=vscode_extensions,source=/,target=/mnt/vscode-extensi
       /mnt/vscode-helpers/install-extensions.sh "${remote_home}/install-vscode-extensions.sh"; \
     test ! -d "${remote_home}/.vscode-server/extensions" \
       || test -z "$(find "${remote_home}/.vscode-server/extensions" -mindepth 1 -print -quit)"
+
+LABEL devcontainers.wolfi.lock.sha256="${WOLFI_LOCK_SHA256}"
 
 USER ${REMOTE_USER}
 WORKDIR /workspaces
