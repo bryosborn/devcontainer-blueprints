@@ -14,8 +14,7 @@ import {
 } from "yaml";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const DEFAULT_CONFIG_PATH = path.join(REPO_ROOT, "config/wolfi-build.yaml");
-const DEFAULT_LOCK_PATH = path.join(REPO_ROOT, "config/wolfi-build.lock.json");
+const DEFAULT_CONFIG_PATH = path.join(REPO_ROOT, "config/wolfi-dev.yaml");
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const IMAGE_COMPONENT_PATTERN = /^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*$/;
 const IMAGE_TAG_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
@@ -121,14 +120,6 @@ function selectorAt(value, location) {
   return selector;
 }
 
-function imageComponentAt(value, location) {
-  const component = stringAt(value, location, { maxLength: 128 });
-  if (!IMAGE_COMPONENT_PATTERN.test(component)) {
-    configError(location, "must be a lowercase OCI repository component");
-  }
-  return component;
-}
-
 function imagePrefixAt(value, location) {
   const prefix = stringAt(value, location, { maxLength: 255 });
   if (prefix.includes("@") || prefix.endsWith("/") || prefix.startsWith("/")) {
@@ -191,6 +182,9 @@ function relativeArtifactPathAt(value, location) {
   }
   if (path.posix.normalize(artifactPath) !== artifactPath) {
     configError(location, "must be a normalized relative POSIX path");
+  }
+  if (components[0] !== "artifacts" || components.length < 2) {
+    configError(location, "must identify a dedicated directory below artifacts/");
   }
   return artifactPath;
 }
@@ -275,8 +269,10 @@ function normalizeToolchain(value) {
   const normalized = {};
 
   if (hasOwn(toolchain, "build")) {
-    const build = recordAt(toolchain.build, "toolchain.build", ["clang"]);
-    normalized.build = { clang: selectorAt(build.clang, "toolchain.build.clang") };
+    const build = recordAt(toolchain.build, "toolchain.build", [], ["clang"]);
+    normalized.build = hasOwn(build, "clang")
+      ? { clang: selectorAt(build.clang, "toolchain.build.clang") }
+      : {};
   }
   if (hasOwn(toolchain, "python")) {
     normalized.python = uniqueArrayAt(toolchain.python, "toolchain.python", selectorAt, { minItems: 1, maxItems: 8 });
@@ -309,9 +305,12 @@ function normalizeToolchain(value) {
 
   if (hasOwn(toolchain, "rust")) {
     const rust = recordAt(toolchain.rust, "toolchain.rust", ["toolchain", "components"]);
+    const rustToolchain = selectorAt(rust.toolchain, "toolchain.rust.toolchain");
+    if (!/^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(rustToolchain)) {
+      configError("toolchain.rust.toolchain", "must be a dated nightly: nightly-YYYY-MM-DD");
+    }
     const allowedComponents = new Set(["rust-src", "rust-analyzer", "rustfmt", "clippy"]);
     const components = uniqueArrayAt(rust.components, "toolchain.rust.components", selectorAt, {
-      minItems: 1,
       maxItems: allowedComponents.size
     });
     for (const component of components) {
@@ -320,7 +319,7 @@ function normalizeToolchain(value) {
       }
     }
     normalized.rust = {
-      toolchain: selectorAt(rust.toolchain, "toolchain.rust.toolchain"),
+      toolchain: rustToolchain,
       components
     };
   }
@@ -329,67 +328,31 @@ function normalizeToolchain(value) {
 }
 
 export function validateWolfiConfig(value) {
-  const root = recordAt(value, "config", [
-    "schemaVersion",
-    "images",
-    "artifacts",
-    "wolfi",
-    "user",
-    "docker",
-    "vscode",
-    "toolchain"
+  const root = recordAt(value, "config", ["schemaVersion", "image", "artifacts", "wolfi"], [
+    "user", "devcontainer", "docker", "vscode", "toolchain"
   ]);
-
-  if (root.schemaVersion !== 1) {
-    configError("schemaVersion", "must be the integer 1");
+  if (root.schemaVersion !== 2) {
+    configError("schemaVersion", "must be the integer 2; migrate legacy image roles to one image.reference");
   }
-
-  const images = recordAt(root.images, "images", ["prefix", "version", "platform", "names"]);
-  const imageNames = recordAt(images.names, "images.names", ["dod", "vscode", "toolchain"]);
-  const normalizedNames = {
-    dod: imageComponentAt(imageNames.dod, "images.names.dod"),
-    vscode: imageComponentAt(imageNames.vscode, "images.names.vscode"),
-    toolchain: imageComponentAt(imageNames.toolchain, "images.names.toolchain")
-  };
-  if (new Set(Object.values(normalizedNames)).size !== Object.keys(normalizedNames).length) {
-    configError("images.names", "image names must be unique");
+  const image = recordAt(root.image, "image", ["reference", "platform"]);
+  const platform = stringAt(image.platform, "image.platform", { maxLength: 32 });
+  if (!["linux/amd64", "linux/arm64"].includes(platform)) {
+    configError("image.platform", "must be linux/amd64 or linux/arm64");
   }
-  const platform = stringAt(images.platform, "images.platform", { maxLength: 32 });
-  if (!new Set(["linux/amd64", "linux/arm64"]).has(platform)) {
-    configError("images.platform", "must be linux/amd64 or linux/arm64");
-  }
-  const imageVersion = stringAt(images.version, "images.version", { maxLength: 128 });
-  if (!IMAGE_TAG_PATTERN.test(imageVersion)) {
-    configError("images.version", "must be a valid OCI tag");
-  }
-
   const artifacts = recordAt(root.artifacts, "artifacts", ["root"]);
   const wolfi = recordAt(root.wolfi, "wolfi", ["baseImage", "repositories"]);
   const repositories = recordAt(wolfi.repositories, "wolfi.repositories", ["main", "extra"]);
-  const user = recordAt(root.user, "user", ["name", "uid", "gid"]);
-  const docker = recordAt(root.docker, "docker", ["cli", "buildx", "compose"]);
-  const vscode = recordAt(root.vscode, "vscode", ["version", "quality", "extensions"]);
-
-  const userName = stringAt(user.name, "user.name", { maxLength: 32 });
-  if (!USER_NAME_PATTERN.test(userName) || userName === "root") {
-    configError("user.name", "must be a non-root POSIX user name");
+  const devcontainer = root.devcontainer ?? false;
+  if (typeof devcontainer !== "boolean" || (hasOwn(root, "devcontainer") && root.devcontainer == null)) {
+    configError("devcontainer", "must be a boolean");
   }
-  const quality = stringAt(vscode.quality, "vscode.quality", { maxLength: 16 });
-  if (!new Set(["stable", "insider"]).has(quality)) {
-    configError("vscode.quality", "must be stable or insider");
-  }
-
-  return {
-    schemaVersion: 1,
-    images: {
-      prefix: imagePrefixAt(images.prefix, "images.prefix"),
-      version: imageVersion,
-      platform,
-      names: normalizedNames
+  const normalized = {
+    schemaVersion: 2,
+    image: {
+      reference: splitMutableImageReference(image.reference, "image.reference").reference,
+      platform
     },
-    artifacts: {
-      root: relativeArtifactPathAt(artifacts.root, "artifacts.root")
-    },
+    artifacts: { root: relativeArtifactPathAt(artifacts.root, "artifacts.root") },
     wolfi: {
       baseImage: splitMutableImageReference(wolfi.baseImage, "wolfi.baseImage").reference,
       repositories: {
@@ -397,29 +360,61 @@ export function validateWolfiConfig(value) {
         extra: repositoryUrlAt(repositories.extra, "wolfi.repositories.extra")
       }
     },
-    user: {
-      name: userName,
+    devcontainer,
+    toolchain: normalizeToolchain(hasOwn(root, "toolchain") ? root.toolchain : {})
+  };
+  if (hasOwn(root, "user")) {
+    const user = recordAt(root.user, "user", ["name", "uid", "gid"]);
+    const name = stringAt(user.name, "user.name", { maxLength: 32 });
+    if (!USER_NAME_PATTERN.test(name) || name === "root") {
+      configError("user.name", "must be a non-root POSIX user name; omit user to run as root");
+    }
+    normalized.user = {
+      name,
       uid: linuxIdAt(user.uid, "user.uid"),
       gid: linuxIdAt(user.gid, "user.gid")
-    },
-    docker: {
-      cli: selectorAt(docker.cli, "docker.cli"),
-      buildx: selectorAt(docker.buildx, "docker.buildx"),
-      compose: selectorAt(docker.compose, "docker.compose")
-    },
-    vscode: {
+    };
+  }
+  if (devcontainer && !normalized.user) {
+    configError("devcontainer", "requires a configured non-root user");
+  }
+  if (hasOwn(root, "docker")) {
+    const docker = recordAt(root.docker, "docker", [], ["cli", "buildx", "compose", "socket"]);
+    const selected = {};
+    for (const key of ["cli", "buildx", "compose"]) {
+      if (hasOwn(docker, key)) selected[key] = selectorAt(docker[key], `docker.${key}`);
+    }
+    selected.socket = hasOwn(docker, "socket") ? docker.socket : false;
+    if (typeof selected.socket !== "boolean") configError("docker.socket", "must be a boolean");
+    if (hasOwn(selected, "buildx") && !hasOwn(selected, "cli")) {
+      configError("docker.buildx", "requires docker.cli");
+    }
+    if (selected.socket && (!hasOwn(selected, "cli") || !devcontainer || !normalized.user)) {
+      configError("docker.socket", "requires docker.cli, devcontainer: true, and a named user");
+    }
+    normalized.docker = selected;
+  }
+  if (hasOwn(root, "vscode")) {
+    const vscode = recordAt(root.vscode, "vscode", ["version"], ["quality", "extensions"]);
+    const quality = hasOwn(vscode, "quality") ? stringAt(vscode.quality, "vscode.quality", { maxLength: 16 }) : "stable";
+    if (quality !== "stable") configError("vscode.quality", "must be stable; offline server layouts support stable releases");
+    normalized.vscode = {
       version: selectorAt(vscode.version, "vscode.version"),
       quality,
-      extensions: uniqueArrayAt(vscode.extensions, "vscode.extensions", extensionIdAt, {
+      extensions: uniqueArrayAt(hasOwn(vscode, "extensions") ? vscode.extensions : [], "vscode.extensions", extensionIdAt, {
         maxItems: 256,
         caseInsensitive: true
       })
-    },
-    toolchain: normalizeToolchain(root.toolchain)
-  };
+    };
+    if (normalized.vscode.extensions.some((id) => id.toLowerCase() === "rust-lang.rust-analyzer")
+        && !normalized.toolchain.rust?.components.includes("rust-analyzer")) {
+      configError("vscode.extensions", "rust-lang.rust-analyzer requires toolchain.rust.components to include rust-analyzer for offline activation");
+    }
+  }
+  return normalized;
 }
 
-export function parseWolfiConfig(source, sourceName = "wolfi-build.yaml") {
+export function parseWolfiConfig(source, sourceName = "wolfi-profile.yaml") {
   const document = parseDocument(source, {
     logLevel: "silent",
     merge: false,
@@ -485,19 +480,14 @@ export function wolfiConfigSemanticSha256(config) {
   return crypto.createHash("sha256").update(canonicalJson(config), "utf8").digest("hex");
 }
 
-export function wolfiImageReferences(config) {
-  return Object.fromEntries(
-    Object.entries(config.images.names).map(([key, name]) => {
-      const repository = `${config.images.prefix}/${name}`;
-      return [key, {
-        name,
-        repository,
-        tag: config.images.version,
-        reference: `${repository}:${config.images.version}`,
-        platform: config.images.platform
-      }];
-    })
-  );
+export function wolfiImageReference(config) {
+  return { reference: config.image.reference, platform: config.image.platform };
+}
+
+export function companionLockPath(configPath) {
+  return /\.ya?ml$/i.test(configPath)
+    ? configPath.replace(/\.ya?ml$/i, ".lock.json")
+    : `${configPath}.lock.json`;
 }
 
 function readJsonFile(filePath, description) {
@@ -514,10 +504,10 @@ function readJsonFile(filePath, description) {
   }
 }
 
-export function verifyWolfiLock(config, lock, { requireBaseImage = true } = {}) {
-  recordAt(lock, "lock", ["schemaVersion", "generatedAt", "source", "resolver", "config", "images", "resolved"]);
-  if (lock.schemaVersion !== 1) {
-    configError("lock.schemaVersion", "must be the integer 1");
+export function verifyWolfiLock(config, lock, { requireBaseImage = true, requireArtifacts = true } = {}) {
+  recordAt(lock, "lock", ["schemaVersion", "generatedAt", "source", "resolver", "config", "image", "resolved"]);
+  if (lock.schemaVersion !== 2) {
+    configError("lock.schemaVersion", "must be the integer 2");
   }
   const generatedAt = stringAt(lock.generatedAt, "lock.generatedAt", { maxLength: 64 });
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(generatedAt)
@@ -538,18 +528,18 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true } = {}) 
   if (source.semanticSha256 !== expectedHash) {
     configError(
       "lock.source.semanticSha256",
-      `does not match the YAML (expected ${expectedHash}); run ./scripts/wolfi/update-lock.sh`
+      `does not match the YAML (expected ${expectedHash}); run ./scripts/wolfi.sh update-lock --config <profile.yaml>`
     );
   }
   if (canonicalJson(lock.config) !== canonicalJson(config)) {
-    configError("lock.config", "does not match the normalized YAML; run ./scripts/wolfi/update-lock.sh");
+    configError("lock.config", "does not match the normalized YAML; run ./scripts/wolfi.sh update-lock --config <profile.yaml>");
   }
-  if (canonicalJson(lock.images) !== canonicalJson(wolfiImageReferences(config))) {
-    configError("lock.images", "does not match the image coordinates derived from the YAML");
+  if (canonicalJson(lock.image) !== canonicalJson(wolfiImageReference(config))) {
+    configError("lock.image", "does not match the image coordinates derived from the YAML");
   }
 
   const resolver = recordAt(lock.resolver, "lock.resolver", ["name", "version", "runtime", "stages"]);
-  if (resolver.name !== "devcontainer-blueprints-wolfi-lock" || resolver.version !== 1) {
+  if (resolver.name !== "devcontainer-blueprints-wolfi-lock" || resolver.version !== 2) {
     configError("lock.resolver", "uses an unsupported lock generator name or version");
   }
   if (resolver.runtime == null || typeof resolver.runtime !== "object" || Array.isArray(resolver.runtime)) {
@@ -594,6 +584,17 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true } = {}) 
   }
 
   recordAt(lock.resolved, "lock.resolved", requireBaseImage ? ["baseImage"] : [], ["baseImage", "apk", "vscode", "extensions", "kubectl", "rust", "tools"]);
+  const selectedVendor = {
+    vscode: hasOwn(config, "vscode"),
+    extensions: (config.vscode?.extensions.length ?? 0) > 0,
+    kubectl: hasOwn(config.toolchain, "kubectl"),
+    rust: hasOwn(config.toolchain, "rust")
+  };
+  for (const [name, selected] of Object.entries(selectedVendor)) {
+    if (!selected && hasOwn(lock.resolved, name)) {
+      configError(`lock.resolved.${name}`, "contains an artifact disabled by the configuration");
+    }
+  }
   if (hasOwn(lock.resolved, "baseImage")) {
     const base = recordAt(lock.resolved.baseImage, "lock.resolved.baseImage", [
       "requested",
@@ -607,8 +608,8 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true } = {}) 
     if (base.requested !== requested.reference || base.repository !== requested.repository) {
       configError("lock.resolved.baseImage", "does not resolve the configured base image");
     }
-    if (base.platform !== config.images.platform) {
-      configError("lock.resolved.baseImage.platform", "does not match images.platform");
+    if (base.platform !== config.image.platform) {
+      configError("lock.resolved.baseImage.platform", "does not match image.platform");
     }
     if (!/^sha256:[a-f0-9]{64}$/.test(base.digest)) {
       configError("lock.resolved.baseImage.digest", "must be an OCI SHA256 digest");
@@ -622,10 +623,38 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true } = {}) 
     stringAt(base.mediaType, "lock.resolved.baseImage.mediaType", { maxLength: 256 });
   }
 
+  if (requireArtifacts) {
+    for (const [name, selected] of Object.entries(selectedVendor)) {
+      if (!selected) continue;
+      const artifact = lock.resolved[name];
+      if (artifact == null || typeof artifact !== "object" || Array.isArray(artifact) || Object.keys(artifact).length === 0) {
+        configError(`lock.resolved.${name}`, "must contain the artifact mapping selected by the configuration");
+      }
+    }
+    const apk = lock.resolved.apk;
+    if (apk == null || typeof apk !== "object" || Array.isArray(apk)) {
+      configError("lock.resolved.apk", "must contain the selected APK resolution");
+    }
+    recordAt(apk.packageSets, "lock.resolved.apk.packageSets", ["final"]);
+    const finalLocation = "lock.resolved.apk.packageSets.final";
+    const final = recordAt(apk.packageSets.final, finalLocation, [
+      "artifactDirectory", "closure", "modules", "packages", "repositorySubdirs", "roots"
+    ], ["repositorySubdir"]);
+    stringAt(final.artifactDirectory, `${finalLocation}.artifactDirectory`, { maxLength: 512 });
+    for (const field of ["closure", "modules", "packages", "repositorySubdirs", "roots"]) {
+      if (!Array.isArray(final[field]) || final[field].length === 0) {
+        configError(`${finalLocation}.${field}`, "must be a non-empty sequence");
+      }
+    }
+    if (hasOwn(final, "repositorySubdir")) {
+      stringAt(final.repositorySubdir, `${finalLocation}.repositorySubdir`, { maxLength: 512 });
+    }
+  }
+
   return true;
 }
 
-export function loadAndVerifyWolfiLock(configPath = DEFAULT_CONFIG_PATH, lockPath = DEFAULT_LOCK_PATH, options = {}) {
+export function loadAndVerifyWolfiLock(configPath = DEFAULT_CONFIG_PATH, lockPath = companionLockPath(configPath), options = {}) {
   const config = loadWolfiConfig(configPath);
   const lock = readJsonFile(lockPath, "lockfile");
   verifyWolfiLock(config, lock, options);
@@ -633,7 +662,7 @@ export function loadAndVerifyWolfiLock(configPath = DEFAULT_CONFIG_PATH, lockPat
   if (lock.source.fileSha256 !== actualFileSha256) {
     configError(
       "lock.source.fileSha256",
-      `does not match the YAML bytes (expected ${actualFileSha256}); run ./scripts/wolfi/update-lock.sh`
+      `does not match the YAML bytes (expected ${actualFileSha256}); run ./scripts/wolfi.sh update-lock --config <profile.yaml>`
     );
   }
   return { config, lock };
@@ -703,7 +732,7 @@ async function main(argv) {
     case "verify-lock": {
       assertArgumentCount(command, args, 0, 2);
       const configPath = path.resolve(args[0] ?? DEFAULT_CONFIG_PATH);
-      const lockPath = path.resolve(args[1] ?? DEFAULT_LOCK_PATH);
+      const lockPath = path.resolve(args[1] ?? companionLockPath(configPath));
       loadAndVerifyWolfiLock(configPath, lockPath);
       console.log(`Verified ${path.relative(REPO_ROOT, lockPath) || path.basename(lockPath)}`);
       return;
@@ -722,4 +751,4 @@ if (invokedPath === import.meta.url) {
   });
 }
 
-export { DEFAULT_CONFIG_PATH, DEFAULT_LOCK_PATH, REPO_ROOT };
+export { DEFAULT_CONFIG_PATH, REPO_ROOT };

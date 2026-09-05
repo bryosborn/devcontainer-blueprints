@@ -1,0 +1,43 @@
+schemaVersion: 2
+
+image:
+  reference: devcontainers/wolfi-ci:0.1.0
+  platform: linux/amd64
+
+artifacts:
+  root: artifacts/wolfi/ci
+
+wolfi:
+  baseImage: cgr.dev/chainguard/wolfi-base:latest
+  repositories:
+    main: https://apk.cgr.dev/chainguard
+    extra: https://apk.cgr.dev/extra-packages
+
+# No user means UID 0. Docker/socket and VS Code support are omitted.
+# Kaniko is pinned and scanned separately by the existing GitLab pipeline.
+toolchain:
+  build:
+    clang: latest
+  python:
+    - "3.12"
+    - "3.13"
+  java: "26"
+  maven: "3.9"
+  node: "24"
+  npm: "12"
+  # Temporarily disabled: Wolfi Main currently stops at 1.5.2-r7, while the
+  # first release fixing its seven High-severity CVEs is 1.5.4.
+  # clamav: "1.5"
+  kubectl: "1.37.0"
+  yq: "4"
+  helm: "4"
+  oras: "1"
+  mongosh: "2"
+  mongodbDatabaseTools: "100"
+  rust:
+    toolchain: nightly-2026-09-04
+    components:
+      - rust-src
+      - rust-analyzer
+      - rustfmt
+      - clippy

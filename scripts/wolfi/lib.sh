@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 # Shared, side-effect-free helpers for Wolfi workflows.
 
-wolfi_repo_root() {
-  cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd
-}
-
 wolfi_abs_path() {
   local repo_root="$1"
   local value="$2"
@@ -13,6 +9,28 @@ wolfi_abs_path() {
   else
     printf '%s/%s\n' "${repo_root}" "${value}"
   fi
+}
+
+# Set the standard path variables once so every command uses the selected
+# profile and its own companion lock. Explicit --lock values remain supported.
+wolfi_init_paths() {
+  local repo_root="$1"
+  local config_file="${2:-}"
+  local lock_file="${3:-}"
+  [[ -n "${config_file}" ]] || {
+    echo "ERROR: --config is required; select a Wolfi YAML profile." >&2
+    return 2
+  }
+  CONFIG_FILE="$(wolfi_abs_path "${repo_root}" "${config_file}")"
+  if [[ -z "${lock_file}" ]]; then
+    case "${CONFIG_FILE,,}" in
+      *.yaml|*.yml) LOCK_FILE="${CONFIG_FILE%.*}.lock.json" ;;
+      *) LOCK_FILE="${CONFIG_FILE}.lock.json" ;;
+    esac
+  else
+    LOCK_FILE="$(wolfi_abs_path "${repo_root}" "${lock_file}")"
+  fi
+  export CONFIG_FILE LOCK_FILE
 }
 
 wolfi_require_commands() {
@@ -52,12 +70,31 @@ wolfi_verify_lock() {
   fi
 
   jq -e '
-    .schemaVersion == 1
+    def vendor_record($key; $enabled):
+      if $enabled then
+        (.resolved[$key] | type == "object" and length > 0)
+      else
+        (.resolved | has($key) | not)
+      end;
+    .schemaVersion == 2
     and (.source.fileSha256 | type == "string" and test("^[a-f0-9]{64}$"))
     and (.source.semanticSha256 | type == "string" and test("^[a-f0-9]{64}$"))
     and (.config | type == "object")
-    and (.images | type == "object")
+    and (.image | type == "object")
+    and .image == .config.image
+    and .config.schemaVersion == 2
+    and (.image.platform == "linux/amd64" or .image.platform == "linux/arm64")
     and (.resolved.baseImage.pinnedReference | type == "string")
+    and vendor_record("vscode"; (.config | has("vscode")))
+    and vendor_record("extensions"; ((.config.vscode.extensions // []) | length > 0))
+    and vendor_record("kubectl"; ((.config.toolchain // {}) | has("kubectl")))
+    and vendor_record("rust"; ((.config.toolchain // {}) | has("rust")))
+    and (.resolved.apk | type == "object" and length > 0)
+    and (.resolved.apk.packageSets | type == "object" and keys == ["final"])
+    and (.resolved.apk.packageSets.final | type == "object" and length > 0)
+    and (.resolved.apk.packageSets.final.artifactDirectory | type == "string" and length > 0)
+    and (.resolved.apk.packageSets.final | [.closure, .roots, .modules, .packages, .repositorySubdirs]
+      | all(.[]; type == "array" and length > 0))
   ' "${lock_file}" >/dev/null || {
     echo "ERROR: Wolfi lock has an invalid frozen/offline shape: ${lock_file}" >&2
     return 1
@@ -65,7 +102,7 @@ wolfi_verify_lock() {
   expected_file_hash="$(jq -er '.source.fileSha256' "${lock_file}")"
   actual_file_hash="$(sha256sum "${config_file}" | awk '{print $1}')"
   if [[ "${actual_file_hash}" != "${expected_file_hash}" ]]; then
-    echo "ERROR: Wolfi YAML differs from its lock; run ./scripts/wolfi/update-lock.sh." >&2
+    echo "ERROR: Wolfi YAML differs from its lock; run ./scripts/wolfi.sh update-lock --config <profile.yaml>." >&2
     return 1
   fi
 }
@@ -120,14 +157,6 @@ wolfi_platform_slug() {
   case "$1" in
     linux/amd64) printf '%s\n' linux-amd64 ;;
     linux/arm64) printf '%s\n' linux-arm64 ;;
-    *) echo "ERROR: Unsupported Wolfi platform: $1" >&2; return 1 ;;
-  esac
-}
-
-wolfi_apk_arch() {
-  case "$1" in
-    linux/amd64) printf '%s\n' x86_64 ;;
-    linux/arm64) printf '%s\n' aarch64 ;;
     *) echo "ERROR: Unsupported Wolfi platform: $1" >&2; return 1 ;;
   esac
 }

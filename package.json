@@ -1,11 +1,11 @@
 {
-  "name": "devcontainer-blueprints-extension-prefetcher",
+  "name": "wolfi-image-blueprints",
   "private": true,
   "type": "module",
   "scripts": {
-    "prefetch:vscode-extensions": "node src/base-vscode/scripts/prefetch-extensions.mjs",
-    "test:vscode-extensions": "node src/base-vscode/scripts/test-extension-resolver.mjs",
-    "test:wolfi-config": "node scripts/wolfi/test-config.mjs"
+    "test:vscode-extensions": "node src/wolfi/components/vscode/test-extension-resolver.mjs",
+    "test:wolfi-config": "node scripts/wolfi/test-config.mjs",
+    "test": "npm run test:wolfi-config && npm run test:vscode-extensions && python3 -m unittest discover -s test/wolfi -p \"test_*.py\" && python3 src/wolfi/vendor-artifacts/scripts/test-vendor.py"
   },
   "dependencies": {
     "semver": "^7.7.2",

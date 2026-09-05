@@ -1,31 +1,25 @@
 {
-  "name": "Devcontainer Blueprints Bootstrap",
-
+  "name": "Wolfi Blueprints Bootstrap",
   "build": {
-    "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile",
+    "context": ".."
   },
-
+  "containerUser": "root",
   "remoteUser": "vscode",
-
-  "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1.10.0": {
-      "moby": false
-    },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "22"
-    }
-  },
-
+  "updateRemoteUserUID": true,
+  "init": true,
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"
+  ],
+  "securityOpt": ["label=disable"],
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-vscode-remote.remote-containers",
         "timonwong.shellcheck",
-        "openai.chatgpt",
-        "ms-vscode.PowerShell"
+        "openai.chatgpt"
       ]
     }
   },
-
-  "postCreateCommand": "npm install -g @devcontainers/cli"
+  "postCreateCommand": "npm ci --no-audit --no-fund"
 }

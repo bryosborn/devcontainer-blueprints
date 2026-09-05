@@ -1,571 +1,239 @@
-# Wolfi Evaluation Workflow
+# Wolfi configuration, supply, and runtime guide
 
-The Wolfi implementation is a parallel evaluation stack. It does not replace
-the repository's Ubuntu defaults, and it does not change the existing Ubuntu or
-WSL artifact workflows.
+Each YAML describes one reusable image. CI and dev are example configurations
+using the same builder; they are not hard-coded output roles. The repository
+bootstrap is a separate, connected editor environment that can prepare the
+images from a clean checkout.
 
-```text
-cgr.dev/chainguard/wolfi-base:<locked platform digest>
-  -> devcontainers/wolfi-base-dod:0.1.0
-  -> devcontainers/wolfi-base-vscode:0.1.0
-  -> devcontainers/wolfi-base-toolchain:0.1.0
-```
+## Configuration contract
 
-The three images share the same named `vscode` identity and
-Docker-outside-of-Docker behavior. The toolchain build also creates a core
-image and probe images for Helm, ORAS, mongosh, and MongoDB Database Tools so
-their size and vulnerability contributions can be measured directly.
+Use schema version 2. The parser rejects unknown fields, duplicate keys,
+aliases, YAML merge keys, custom tags, interpolation, unsafe references/paths,
+and unsupported platforms. The output is an explicit tagged OCI
+`image.reference`, with `image.platform` set to `linux/amd64` or `linux/arm64`.
+`artifacts.root` is a dedicated relative directory below `artifacts/`.
+Configurations must use distinct, non-overlapping artifact roots and output tags.
 
-## Configuration and Locking
+| Section | Behavior when present | When omitted |
+| --- | --- | --- |
+| `user` | Create `name`, positive `uid`, and positive `gid`; home `/home/<name>` | Root, UID/GID 0, `/root` |
+| `devcontainer: true` | Named user required; remote-user/UID-update/root-startup/init metadata | Ordinary image with shell command |
+| `docker.cli` | Version-selected native Docker CLI | No Docker CLI root |
+| `docker.buildx` | Native Buildx; requires `docker.cli` | No Buildx root |
+| `docker.compose` | Native Compose | No Compose root |
+| `docker.socket: true` | Requires CLI, named user and Dev Container metadata; enables socket runtime | No proxy, socket mount, or Docker host environment |
+| `vscode` | Required `version`; `quality` defaults to `stable`; the resolver locks its server commit | No server or extension payloads |
+| `vscode.extensions` | Resolve and archive selected extensions | No extension resolution/archive |
+| `toolchain` | Select individual versioned tools below | Empty toolchain |
 
-[`config/wolfi-build.yaml`](../config/wolfi-build.yaml) is the only
-hand-edited Wolfi parameter file. It contains image coordinates and platform,
-artifact root, Wolfi repositories, the initial user identity, Docker package
-selectors, VS Code and extension selections, and toolchain selections. A tool's
-key being present enables it; remove that key to disable the tool. Internal APK
-package names and dependency closures remain implementation details under
-[`src/wolfi/apk-artifacts`](../src/wolfi/apk-artifacts/).
+The common baseline contains Bash, certificates, core utilities, Git, grep,
+GNU tar/gzip, jq and libc utilities. Internal APK mappings remain in the source
+package catalog. Optional tools can still bring required transitive packages;
+omission removes that tool's package roots and component-specific payloads.
 
-The parser rejects unknown fields, duplicate keys and extensions, aliases,
-merge keys, custom tags, interpolation strings, unsafe image names, invalid
-UID/GID values, and non-HTTPS repository URLs. Run its focused tests with:
+Toolchain selections retain the existing shapes: `build` enables the native
+build tools, with optional `build.clang`; `python` is a version list; Java,
+Maven, Node, npm, ClamAV, kubectl, yq, Helm, ORAS, mongosh, and
+`mongodbDatabaseTools` take version selectors. Maven requires Java; npm requires
+Node. Rust requires `toolchain: nightly-YYYY-MM-DD` and a `components` list.
+Use `components: []` for the minimal Rust compiler/Cargo toolchain, or select
+`rust-src`, `rust-analyzer`, `rustfmt`, and `clippy` individually. Keep
+`rust-analyzer` selected when its VSIX is selected. Native mappings and version
+constraints are validated during resolution.
 
-```bash
-npm run test:wolfi-config
-```
+Both examples retain the same initial tool selections. Updating their locks
+independently can resolve rolling selectors at different times; review the
+shared selected versions together when refreshing the pair. ClamAV remains
+commented out until the signed package supply contains the fixed builds and
+passes the raw scan gate. Tools are never automatically removed to pass a scan.
 
-[`config/wolfi-build.lock.json`](../config/wolfi-build.lock.json) is generated
-and committed, but never edited manually. It embeds the normalized YAML and its
-semantic hash, image refs, the target-platform base digest, signed APK
-resolution, exact artifact URLs and hashes, VS Code commit, resolved extension
-versions, and resolver versions. Every frozen command fails when the YAML and
-lock disagree. A disconnected host without Node dependencies uses the stricter
-raw YAML file hash and reads normalized JSON from the lock with `jq`.
-
-Every DOD, VS Code, toolchain, core, and native-tool probe image also carries
-the exact SHA256 of the complete lockfile bytes in the OCI label
-`devcontainers.wolfi.lock.sha256`. A downstream build verifies its parent label
-before adding a layer, and the test and scan entry points reject a missing or
-mismatched label. Changing even generated resolution data therefore requires a
-rebuild before an image can be tested or presented as a pristine locked result.
-
-The trust model is:
-
-- The mutable Wolfi base selector is resolved to a platform-specific registry
-  digest. A verified saved image tar is retained under the platform artifact
-  directory and loaded when the digest-pinned image is missing locally.
-- Wolfi Main and Extra remain separate repositories. Their original signed
-  indexes, trusted public keys and SHA256 fingerprints, exact package versions,
-  URLs, sizes, and hashes are retained. Alpine repositories and packages are
-  not mixed into this supply. See Chainguard's
-  [package model](https://edu.chainguard.dev/chainguard/containers/features/packages/package-model/).
-- APK dependency simulation copies the digest-pinned base image's exact
-  `/etc/apk/world` into the isolated root before adding configured package
-  roots. This keeps packages already selected by the immutable base at their
-  base-compatible revisions instead of silently moving them to newer revisions
-  from a rolling index. The offline install test seeds both the base world and
-  installed-package database and checks the resulting base-plus-closure set.
-- VS Code Server, kubectl, and Rust use upstream checksums where the upstream
-  publishes them. The resolver records the bytes' SHA256 in every case.
-- Marketplace VSIX endpoints do not provide an independent checksum suitable
-  for this workflow. Initial resolution therefore uses verified HTTPS and
-  records the downloaded SHA256; every later prefetch and build uses that
-  locked value.
-- No Wolfi path uses `curl --insecure`, `--allow-untrusted`, an empty hash, or a
-  silently refreshed artifact. Enterprise CAs belong in the system trust store
-  or standard CA environment variables.
-- Frozen re-prefetch of locked APK and vendor bytes retries transient I/O
-  failures at most five times with finite request timeouts and bounded
-  exponential backoff. Downloads use temporary files; APK downloads also reject
-  a truncated declared `Content-Length`. Frozen bytes replace the cached file
-  only after their locked SHA256 matches. A hash mismatch or redirect away from
-  HTTPS remains a hard failure and never updates the lock.
-
-Retaining the signed indexes and APK files matters because a rolling Wolfi
-package revision can age out of the public repository even though it remains in
-an older reviewed lock.
-
-## Connected Refresh and Frozen Builds
-
-Docker, the Dev Container CLI, Node/npm, `jq`, Python 3, `sha256sum`, and
-`shellcheck` are needed for the full workflow. Trivy is additionally required
-for scanning. Install the locked Node dependencies before resolving a lock:
-
-```bash
-npm ci
-```
-
-On a connected preparation host, edit the YAML and run:
-
-```bash
-./scripts/wolfi/update-lock.sh
-git diff -- config/wolfi-build.yaml config/wolfi-build.lock.json
-./scripts/wolfi/prefetch-all.sh
-```
-
-`update-lock.sh` is the only command allowed to resolve mutable selectors. It
-resolves and materializes the base snapshot, signed APK closure, VS Code and
-Marketplace payloads, kubectl, and Rust, then atomically replaces the lock only
-after successful resolution. Rerunning it without changing the YAML is the
-rolling security-refresh operation. Review the resulting lock diff before
-committing it.
-
-`prefetch-all.sh` never resolves a selector. It verifies existing artifacts and
-may retrieve a missing artifact only from its exact locked URL, rejecting any
-hash or signature mismatch. On a disconnected host all locked bytes must
-already have been transferred, so this command becomes a frozen verification
-and base-image load step.
-
-Build and test from that frozen supply:
-
-```bash
-./scripts/wolfi/prefetch-all.sh
-./scripts/wolfi/build-all.sh
-./scripts/wolfi/test-all.sh
-```
-
-Image builds and direct Docker smoke containers use `--network=none`; nested
-DOD build, Buildx, run, and Compose fixtures also disable their networks, and
-the true Dev Container identity fixture is started with networking disabled.
-`test-all.sh` runs the static tests, a real VS Code Server socket/HTTP startup,
-the full toolchain and native-tool probes, and true `devcontainer up` identity
-tests. Those integration tests need the host Docker socket,
-passwordless host `sudo`, `setpriv`, and UID/GID values that do not conflict
-with unrelated host accounts. For a quicker development pass, use
-`./scripts/wolfi/test-all.sh --quick`; it keeps the initial identity only and
-does not perform the disposable extension installation.
-
-The four main workflow scripts accept `--config` and `--lock` paths, allowing a
-separate reviewed configuration/lock pair without changing repository defaults.
-
-## Docker-outside-of-Docker and Identity
-
-The DOD layer installs native Wolfi `docker-cli`, `docker-cli-buildx`,
-`docker-compose`, `socat`, Bash, sudo, certificates, core utilities, and the
-required libc helpers. It does not install Docker Engine, `dockerd`,
-`containerd`, DinD, or a rootless daemon. Tests exercise both `docker compose`
-and `docker-compose`.
-
-The identity contract is:
-
-| Setting | Value |
-| --- | --- |
-| OCI image user | `vscode` by name |
-| Dev Container `containerUser` | `root` |
-| Dev Container `remoteUser` | `vscode` |
-| UID synchronization | `updateRemoteUserUID=true` |
-| Initial UID/GID | `1000:1000` |
-| Home and shell | `/home/vscode`, `/bin/bash` |
-| Init process | enabled |
-
-The image keeps `/opt` and `/workspaces` root-owned. Mutable server and
-extension content lives beneath `/home/vscode`, where the Dev Containers UID
-helper can update ownership. Passwordless sudo is provided by a root-owned
-mode-`0440` fragment.
-
-The package-free local runtime Feature is the one intentional Wolfi exception
-to the repository's no-custom-Feature rule. It carries only metadata, a source
-mount from `/var/run/docker.sock` to `/var/run/docker-host.sock`, and the proxy
-entrypoint. See the Dev Container specification's
-[local Feature support](https://github.com/devcontainers/spec/blob/main/docs/specs/devcontainer-features.md).
-
-At every startup the entrypoint resolves the current numeric `vscode` UID and
-GID after Dev Containers has had a chance to update them. It uses `socat` to
-expose `/var/run/docker.sock` with that ownership and mode `0660`. It does not
-change, replace, or remove the source host socket. Proxy state is locked;
-repeated initialization reuses a valid proxy, and stale targets are removed
-only when a recorded device/inode marker proves that this entrypoint created
-them. A missing or non-socket source, an unrecognized target, or a five-second
-readiness timeout fails with a clear error.
-
-The focused proxy suite covers a root-owned source with a colliding group, an
-unmapped arbitrary source GID, and a user-owned
-`/run/user/<uid>/docker.sock`-style rootless source. It verifies data flow and
-the target ownership/mode while requiring the source ownership, mode, device,
-and inode to remain unchanged. It also covers missing and non-socket sources,
-stale proxy state, repeated initialization, and container restart.
-
-For rootless Docker on a Linux host, override the mount with the real host UID
-while keeping the in-container target unchanged:
-
-```json
-{
-  "mounts": [
-    "source=/run/user/<host-uid>/docker.sock,target=/var/run/docker-host.sock,type=bind"
-  ]
-}
-```
-
-Dev Containers merges mounts by target, so the consuming configuration's
-`/var/run/docker-host.sock` entry replaces the image metadata entry. Confirm the
-merged configuration before relying on this in a managed environment.
-
-The Feature retains `securityOpt: ["label=disable"]` for SELinux socket-mount
-compatibility; assess that setting against the host's policy. Docker Desktop
-Enhanced Container Isolation may block the socket mount until an administrator
-adds an exception. In every environment, access to the Docker socket grants
-effectively host-root authority; Docker documents the same warning in its
-[daemon socket guidance](https://docs.docker.com/engine/install/linux-postinstall/).
-
-## VS Code Layer and Extension Archive
-
-Wolfi is glibc-based, so the image uses Microsoft's GNU
-`server-linux-x64`/`server-linux-arm64` archive rather than an Alpine/musl
-server. The selected commit is installed into both supported layouts:
+## One command interface
 
 ```text
-/home/vscode/.vscode-server/cli/servers/Stable-<commit>/server
-/home/vscode/.vscode-server/bin/<commit>
+./scripts/wolfi.sh COMMAND --config FILE [--lock FILE] [command options]
 ```
 
-Only demonstrated headless dependencies are added. The Ubuntu font set, X11,
-ffmpeg, and broad GUI/Electron libraries are intentionally absent.
+The explicit YAML selects a companion `<basename>.lock.json` unless `--lock`
+is supplied. Paths are repository-relative or absolute. The commands are:
 
-All resolved server and client extensions remain uninstalled in the delivered
-images:
+- `update-lock`: connected resolution and atomic lock replacement.
+- `prefetch`: verify frozen supply; fetch missing bytes only from locked URLs.
+- `build`: verify supply and build the configured image offline.
+- `test`: selected runtime checks; `--quick` reduces integration work.
+- `scan`: raw findings, SBOM, spreadsheet, and acceptance result.
+- `package`: profile-specific verified transfer bundle; optional `--output`.
+- `load`: verify and load the transferred base and output image.
+- `clean`: selected artifacts/bundle; `--dry-run` and opt-in `--docker-images`.
+
+Old schema-v1 configurations and fixed image-chain commands are retired.
+Migrate by choosing an example and regenerating its companion lock. Generated
+locks must never be edited manually.
+
+## Frozen supply and offline builds
+
+`update-lock` is the only mutable resolver. It selects the base's platform
+digest, retains a verified local image tar, verifies original signed Wolfi
+Main/Extra indexes and trusted key fingerprints, resolves a complete selected
+APK closure, and records exact vendor payload hashes and resolver provenance.
+The APK solver starts from the immutable base's actual `/etc/apk/world`; offline
+installation retains the installed database and checks base-plus-closure state.
+Main and Extra stay separate. No Alpine package mixing or signature bypass is
+permitted.
+
+The lock embeds the normalized configuration, its semantic/source hashes, and
+one output image. Frozen commands reject configuration drift. With Node/YAML
+available they perform semantic validation; disconnected verification uses the
+stricter raw source hash when parser dependencies are unavailable.
+
+Every output carries the complete lockfile bytes' SHA256 in
+`devcontainers.wolfi.lock.sha256`. Tests, scans, packaging, and loading reject
+missing/stale labels. A changed lock requires rebuilding, even when its YAML
+has not changed.
+
+Missing locked APK/vendor files may be re-fetched from their exact HTTPS URLs
+with bounded retries. Hash mismatches, non-HTTPS redirects, unavailable old
+revisions, and incomplete downloads fail. Retain the frozen artifacts: rolling
+repositories can retire older versions. Rust's generated archive is a retained
+artifact and is not recreated implicitly during frozen prefetch.
+
+All image installation uses `--network=none` and named local BuildKit contexts.
+Raw download caches are bind mounts, not image layers. Disabled vendor stages
+use an explicit empty local context. Builds use the verified materialized local
+base snapshot, including after disconnected restoration, and the built-in
+Dockerfile frontend. No external frontend image must be fetched.
+
+## Development runtime
+
+The dev example retains named `vscode`, initial `1000:1000`, root container
+startup, remote-user UID synchronization, and init. The user home is writable;
+`/opt` and `/workspaces` remain root-owned. Passwordless sudo is supplied when
+Dev Container metadata is enabled.
+
+Optional socket support installs native CLI tooling and a package-free local
+Feature. It mounts the source socket at `/var/run/docker-host.sock` and proxies
+it to `/var/run/docker.sock`, owned by the current remote UID/GID with mode
+`0660`. Startup resolves identity after UID synchronization. It never modifies
+the source socket. Missing sources, unexpected target sockets, or readiness
+failures are errors. The Feature retains `label=disable` for SELinux socket
+compatibility. Host socket access grants control of the host Docker daemon.
+
+The consuming configuration can override the source mount for rootless Docker
+while keeping `/var/run/docker-host.sock` as its target.
+
+VS Code installs its locked GNU/glibc server in both supported layouts:
 
 ```text
-/home/vscode/vscode-extensions.tar.gz
-/home/vscode/vscode-extensions.tar.gz.sha256
-/home/vscode/install-vscode-extensions.sh
+<home>/.vscode-server/cli/servers/Stable-<commit>/server
+<home>/.vscode-server/bin/<commit>
 ```
 
-The user-controlled flow is:
+The legacy layout includes its `0` marker. No extensions are installed in
+published images. The reproducible `vscode-extensions.tar.gz` in the user home
+contains workspace-capable extensions under `server/` and host-only extensions
+under `client/`. Its adjacent installer verifies checksums, installs server
+extensions on request, and extracts client extensions for transfer. Extension
+locking retains exact versions, platform, dependency order, classifications,
+hashes, built-ins, and warnings.
 
-```bash
-~/install-vscode-extensions.sh --verify-only
-~/install-vscode-extensions.sh
-```
+## GitLab and Kaniko
 
-The helper verifies the outer and internal checksums, explicitly installs the
-server-capable VSIX set, and extracts client-only VSIX files beneath
-`~/vscode-client-extensions/<commit>/` for transfer to desktop VS Code. Image
-builds never invoke it. The default test performs this installation only in a
-disposable, network-disabled container.
+The CI example runs as root in an ordinary shell-compatible container, with no
+Docker daemon/client/socket runtime. It targets Kubernetes runners permitting
+UID 0 with `privileged=false`. Runner admission policies, storage permissions,
+network policy, registry authentication, and application dependency caches
+remain deployment inputs.
 
-Archive construction is byte-reproducible for identical locked inputs, even
-when callers use different umasks or export `TAR_OPTIONS`/`GZIP`. The packager
-unsets those ambient options, sets directories to `0755` and files to `0644`,
-sorts archive members, fixes timestamps at the Unix epoch, normalizes numeric
-ownership to `0:0`, and uses an explicit gzip level without filename or time
-metadata. A focused test exercises each ambient variation and requires
-byte-identical tarballs.
+The [example pipeline](../examples/gitlab-ci.yml) compiles/tests in the CI image
+and passes build artifacts to a dedicated shell-capable Kaniko executor job.
+The existing pipeline owns its approved image/version, digest pin, scan gate,
+and credentials. Kaniko is not installed in these two outputs: its executor
+extracts build layers into its own filesystem and upstream does not support
+copying it into an arbitrary CI image. See the
+[maintained fork's limitations](https://github.com/chainguard-forks/kaniko#known-issues).
+Local manufacturing still uses Docker/BuildKit; no Dockerless image factory is
+introduced by this change.
 
-Marketplace platform selection is validated at the individual version-record
-level. The resolver sends the requested `targetPlatform` in the Marketplace
-query, accepts only records whose own platform is the configured Linux target
-or `universal`, and adds `targetPlatform` to a platform-specific asset URL so a
-shared Marketplace URL cannot silently return another operating system's
-payload. The lock records the selected platform, URL, and SHA256. As an
-additional native-payload check, the resolver extracts
-`extension/bin/cpptools` from each C/C++ candidate and requires a little-endian
-ELF with the expected machine value for x86-64 or AArch64. A mismatched
-candidate is rejected before it can enter the extension archive.
+## Scans and acceptance
 
-## Toolchain and Native-tool Probes
+Each scan validates the selected image's lock label/platform and records its
+immutable image ID, size, raw Trivy JSON, CycloneDX SBOM, CSV, report hashes,
+scanner version, database identities and options. Output is below the profile's
+platform directory at `reports/scan/`.
 
-The final toolchain uses Wolfi packages for Python 3.12/3.13 with pip and venv,
-OpenJDK 26, Maven 3.9, Node 24, npm 12 and Corepack, build-base, OpenSSL and its
-development files, CMake, the current versioned Clang package, yq, Helm 4,
-ORAS, mongosh, and MongoDB Database Tools. Within the toolchain, only
-kubectl 1.37.0 and the selected Rust nightly/components are downloaded vendor
-artifacts. VS Code Server and VSIX files are separately locked inputs to the
-VS Code layer.
+Raw scans clear ambient `TRIVY_*` variables and explicitly use empty
+configuration/ignore files, all severities, and unfixed findings. The scanner
+and database context are frozen during each scan. Reuse one verified cache with
+`--cache-dir DIR --skip-db-download` when comparing the CI/dev outputs at the
+same database revision.
 
-The Rust component list explicitly includes `rust-analyzer`. That puts the
-native language server in the locked Rust archive used by the final image, so
-the archived `rust-lang.rust-analyzer` VSIX does not need an activation-time
-download. In the disposable network-disabled component test, the VSIX entry
-point is syntax-checked, `rustup which rust-analyzer` and `rust-analyzer
---version` must succeed, and the server must answer a real LSP initialize
-request.
+The uninstalled VSIX transfer archive is excluded from the default installed
+image scan and recorded in its options. Use `--include-vsix-archive` for the
+broader archive-content diagnostic. No APK/header ignore policy is applied.
 
-ClamAV is deliberately disabled in the acceptance profile. On 2026-09-04, the
-configured signed x86_64 Wolfi Main index offered `clamav-1.5-scanner` only
-through `1.5.2-r7`; Extra contained no ClamAV package. The raw Trivy result for
-that build reported these seven unique High findings:
+Any raw Critical or High occurrence fails acceptance. Lower severities remain
+visible for review. `--skip-acceptance-gate` produces an explicit not-evaluated
+result and cannot claim PASS. Before validation or scanning starts, previous
+canonical acceptance output is invalidated; fresh reports are staged and
+verified before publication. Build/test success alone is not CVE acceptance.
 
-```text
-CVE-2026-20337
-CVE-2026-20338
-CVE-2026-20339
-CVE-2026-20345
-CVE-2026-20346
-CVE-2026-20347
-CVE-2026-20348
-```
+### Observed scans on 2026-09-05
 
-Each finding was attributed to all eight installed `clamav-1.5` split
-packages, producing 56 occurrences in the final toolchain image. Trivy reports
-`1.5.4-r0` as fixed, but that build was absent from the signed target index.
-The final profile therefore omits `toolchain.clamav`; it does not suppress the
-findings or replace the native package with a vendor download.
+The AMD64 CI and dev examples each passed the configured High/Critical gate
+with Trivy 0.74.0 and the same frozen database, updated on 2026-09-04. Each
+reported zero High/Critical, one Medium, and one Low finding. Reports and exact
+database/image identities are retained under each profile's `reports/scan/`.
+These are scanner results for those inputs, not a claim of complete
+vulnerability coverage.
 
-After the target architecture's signed Main index publishes `1.5.4-r0` or a
-newer `1.5` build, re-enable the native package by restoring this YAML entry:
+Both lower findings are dependency declarations in the installed `rust-src`
+tree for `nightly-2026-09-04`:
 
-```yaml
-toolchain:
-  clamav: "1.5"
-```
+| Finding | Declared package | Source lockfile below `lib/rustlib/src/rust/library/` | Fixed release |
+| --- | --- | --- | --- |
+| [GHSA-cq8v-f236-94qc](https://github.com/advisories/GHSA-cq8v-f236-94qc), Low | `rand` 0.9.2 | `portable-simd/Cargo.lock` | 0.9.3 |
+| [GHSA-7gcf-g7xr-8hxj](https://github.com/advisories/GHSA-7gcf-g7xr-8hxj), Medium | `serde_with` 3.18.0 | `stdarch/Cargo.lock` | 3.21.0 |
 
-Then perform a complete rolling refresh and verify that every selected ClamAV
-split package is at least the fixed patch before accepting the lock:
+These source lockfiles are dormant during the image's normal shell/tool startup;
+their presence does not establish that either dependency is linked into a
+delivered executable. Building the bundled source or reusing these dependencies
+requires a separate reachability review. Both findings remain visible without
+an ignore or VEX suppression.
 
-```bash
-npm ci
-./scripts/wolfi/update-lock.sh
-jq -e '
-  [.resolved.apk.packages[]
-   | select(.name | startswith("clamav-1.5"))
-   | .version
-   | capture("^1\\.5\\.(?<patch>[0-9]+)-r(?<revision>[0-9]+)$")
-   | {patch: (.patch | tonumber), revision: (.revision | tonumber)}] as $versions
-  | ($versions | length) > 0
-    and all($versions[]; .patch > 4 or (.patch == 4 and .revision >= 0))
-' config/wolfi-build.lock.json
-git diff -- config/wolfi-build.yaml config/wolfi-build.lock.json
-./scripts/wolfi/prefetch-all.sh
-./scripts/wolfi/build-all.sh
-./scripts/wolfi/test-all.sh
-./scripts/wolfi/scan.sh
-./scripts/wolfi/compare.sh
-```
+Trivy also reports two OS records skipped because their PURL namespace does
+not match Wolfi. Direct inspection of both images identified two
+`pkg:apk/chainguard/mongosh@2.10.0-r1` records in the embedded
+`/var/lib/db/sbom/mongosh-2.10.0-r1.spdx.json`. Trivy's
+[namespace filter](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/fanal/applier/docker.go#L397-L433)
+removes those duplicate records; its
+[deduplication prefers the APK database](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/fanal/applier/docker.go#L251-L283).
+The installed `mongosh` remains in the vulnerability report and SBOM. All 137
+CI and 149 dev installed APK name/version pairs match the generated SBOMs.
 
-Do not accept the refresh if the `jq` check or the normal Critical/High scan
-gate fails. Because `update-lock.sh` refreshes every mutable selector, review
-the complete lock diff rather than only the ClamAV records.
+There is a narrower **mongosh advisory-feed coverage limitation**: the
+[Wolfi detector](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/detector/ospkg/wolfi/wolfi.go#L31-L56)
+uses the Wolfi advisory source for that retained package. Read-only inspection
+of this scan's frozen database found no `mongosh` package entry in either the
+Wolfi or Chainguard advisory bucket; the CI report also has no separate mongosh
+language scan result. Therefore the zero High/Critical result does not establish
+mongosh's vulnerability coverage. This is an advisory-data gap, not evidence of
+an existing vulnerability; review that coverage before treating this scan as a
+complete release assessment.
 
-Helm 4 is an intentional major-version change from the Ubuntu workflow's Helm
-3 selection. The offline test runs `helm lint` and `helm template` against a
-local fixture, but that does not prove every existing chart, plugin, or script
-is Helm 4 compatible. Treat migration validation as required rather than
-assuming command-level parity.
+## Verification boundaries
 
-The current signed Extra package is labeled `mongosh` `2.10.0-r1`, while its
-embedded `mongosh --version` reports `2.9.1`. The native package is retained
-deliberately during evaluation. The toolchain test prints both values, warns on
-the discrepancy, and can persist its JSON with `--report FILE`; do not silently
-substitute the vendor artifact.
-MongoDB Database Tools include `mongodump`, `mongorestore`, `mongoexport`, and
-the other client utilities, not a MongoDB server.
+`npm test` covers configuration, package selection, resolver/archive behavior,
+and scan/transfer failure cases. Runtime tests run in disposable network-disabled
+containers: language compilation, package tools, Rust offline Cargo and LSP,
+VS Code server HTTP over a Unix socket, and optional disposable VSIX installation.
+Dev Container integration uses real `devcontainer up` with initial, changed,
+mismatched, and large UID/GID scenarios plus socket preservation/restart tests.
 
-The build creates these disposable comparison variants beside the default
-final image:
+Local image smoke tests validate the GitLab shell contract. They do not claim
+that a particular Kubernetes runner or desktop extension host has been tested.
+Run the application pipeline against your runner before promoting its image pin.
 
-```text
-<toolchain-ref>-core
-<toolchain-ref>-probe-helm
-<toolchain-ref>-probe-oras
-<toolchain-ref>-probe-mongosh
-<toolchain-ref>-probe-mongodb-database-tools
-```
-
-A probe is omitted when its YAML key is absent. The ORAS test uses a local OCI
-layout, mongosh evaluates local JavaScript without a server, every Database
-Tools version command is checked, and Helm uses only the local fixture.
-
-The default locked scan requires the core image and every probe implied by the
-current lock. It fails before scanning if any required tag is missing. A custom
-image scan may still be used for diagnostics, but it cannot claim that the
-native-tool assessment is complete or support an equivalent all-tools result
-without the lock-derived core/probe manifest.
-
-## CVE and Size Comparison
-
-Run the report suite after both image families are available locally:
-
-```bash
-./scripts/wolfi/scan.sh
-./scripts/wolfi/compare.sh
-```
-
-The default scan refreshes one dedicated Trivy vulnerability and Java database
-cache, then freezes that context for both families. Wolfi raw results go to
-`artifacts/wolfi/trivy-output/`; fresh Ubuntu raw results go to
-`artifacts/wolfi/ubuntu-trivy-output/raw/`. The existing Ubuntu header-package
-ignore policy is emitted separately under
-`artifacts/wolfi/ubuntu-trivy-output/policy-header-packages/` and is never used
-as the primary Wolfi comparison. Scan provenance is recorded in
-`artifacts/wolfi/trivy-scan-suite.json`.
-
-The shared scanner removes every ambient `TRIVY_*` environment variable and
-uses `--config /dev/null` and `--ignorefile /dev/null`. It explicitly enables
-the vulnerability scanner, all severities, and unfixed findings. This prevents
-a developer's shell variables, `trivy.yaml`, `.trivyignore`, VEX input, severity
-filter, or ignore-status setting from silently narrowing a release/raw scan.
-The only policy exception is an explicitly passed ignore policy, which is
-recorded with its SHA256; Wolfi's pristine scan passes none.
-
-Each raw or policy report directory also receives `scan-metadata.json`. Before
-a scan begins, any older metadata file is removed so a partial failed run
-cannot leave old reports appearing current. The scanner records the immutable
-Docker image ID and platform, verifies that the tag does not move while each
-vulnerability report and SBOM is produced, and confirms that Trivy embedded the
-same image identity in both outputs. It then records a SHA256 for every
-vulnerability JSON and CycloneDX SBOM.
-
-The default comparison requires those image identities and hashes, verifies
-the manifested files byte-for-byte, and checks the raw/policy image identities
-alongside the shared Trivy database and option context. Missing provenance,
-stale image identities, changed tags, and modified report or SBOM bytes are
-rejected rather than reused. `--allow-unverified-scan-context` remains an
-explicit ad hoc reporting escape for missing legacy context; it is not a
-release-acceptance result and does not make a hash mismatch valid.
-
-For the normal locked comparison, the current lockfile is read again. Its exact
-bytes SHA256, platform, three final image references and DOD/VS Code/toolchain
-role ordering, configured native-tool keys, and derived core/probe references
-must match the scan suite and raw report manifests. A suite made from an older
-lock, one that swaps image roles, or one that omits a configured probe is
-rejected rather than described as complete or equivalent.
-
-Each raw directory preserves the established output contract:
-
-```text
-<image>.vulnerabilities.json
-<image>.sbom.cdx.json
-vulnerability-summary.tsv
-vulnerabilities.csv
-```
-
-The CSV columns and ordering are unchanged from the Ubuntu formatter. The
-opaque, unexpanded VSIX transfer archive is skipped for both image families by
-default, while its hashes and offline function remain tested. Use
-`--include-vsix-archive` only for an explicit exploratory scan.
-
-The default gate examines raw reports for the three final Wolfi boundaries and
-fails on any Critical or High occurrence. `--skip-acceptance-gate` is an
-explicit reporting-only escape; it is not an acceptance result. Zero findings
-remain the target, and every remaining Medium, Low, or Unknown finding still
-needs documented review. Do not add a Wolfi ignore rule without a reachability
-or VEX justification.
-
-The currently reviewed non-blocking findings both come from `Cargo.lock` files
-shipped as source material by the requested Rust `rust-src` component:
-
-- Medium `GHSA-7gcf-g7xr-8hxj` is `serde_with` 3.18.0 in
-  `library/stdarch/Cargo.lock`; the listed fix is 3.21.0.
-- Low `GHSA-cq8v-f236-94qc` is `rand` 0.9.2 in
-  `library/portable-simd/Cargo.lock`; Trivy lists fixed releases including
-  0.9.3.
-
-These are dormant source-tree dependency manifests, not installed native-tool
-executables or dependencies introduced by Helm, ORAS, mongosh, or MongoDB
-Database Tools. The same two records consequently appear in the core and each
-probe that inherits the locked Rust source bundle. They can be revisited by
-refreshing the Rust nightly after upstream updates those source lockfiles, or
-removed only by omitting `rust-src` and accepting the resulting Rust tooling
-loss. They are not ignored, and they remain visible in the raw reports.
-
-The normal Ubuntu toolchain currently omits some optional tools and is marked
-as non-equivalent rather than presented as a fair all-tools result. On a
-connected host, build the disposable all-enabled Ubuntu comparator and scan it
-with:
-
-```bash
-./scripts/wolfi/scan.sh --build-ubuntu-all-tools --prefetch-ubuntu-all-tools
-./scripts/wolfi/compare.sh
-```
-
-The disposable image is admitted as equivalent only when its OCI provenance
-labels match the current Ubuntu Docker and toolchain configuration, target
-platform, VS Code source-image ID, build recipe, artifact manifests, and
-payload filesystem. It also binds the complete Wolfi lock SHA256 and a hash of
-the effective Ubuntu APT roots used for parity. Because ClamAV is deliberately
-absent from the current Wolfi profile, the comparator derives a deterministic
-APT-root list that removes only the exact `clamav` root while retaining the
-rest of the frozen Ubuntu repository; it refuses an absent or duplicate root.
-If `toolchain.clamav` is restored in Wolfi, the same derivation retains ClamAV
-in Ubuntu. Admission verifies the expected presence or absence of `clamscan`
-as well as Helm, ORAS, mongosh, and Database Tools.
-
-The functional tool/version check runs by the admitted immutable image ID, and
-the scan suite verifies that Trivy scanned that same ID. A missing or stale
-implicit comparator falls back to the normal, non-equivalent Ubuntu toolchain
-with a warning; an explicitly requested or built comparator fails the scan
-instead. The validated values are recorded under
-`ubuntu.allToolsComparison.provenance` in the scan-suite JSON. This is a
-deterministic local admission check, not a signed remote attestation.
-
-The comparison refuses mismatched or unverified raw scan contexts by default.
-It reports vulnerability totals and native-tool/package/layer attribution, plus
-Docker image, compressed save/export, live filesystem, package-count, and layer
-metrics when the images are present. The generated Markdown and JSON under
-`artifacts/wolfi/comparison/` are the source for current aggregate counts.
-At the start of a comparison, any earlier output directory is moved to a hidden
-`.comparison.previous-*` sibling so a long or failed metrics pass cannot leave
-an old `PASS` at the canonical path. New files are staged as one complete set;
-success publishes that set and removes the backup, while failure leaves the
-canonical path absent and retains the explicitly non-current backup for manual
-recovery.
-Apart from the dated ClamAV hold evidence above, this document does not freeze
-transient CVE or size numbers.
-
-The default scan writes its final-image gate result to
-`artifacts/wolfi/trivy-output/acceptance.json`. The comparison directory
-contains:
-
-```text
-comparison.json
-comparison.md
-vulnerability-comparison.tsv
-native-tool-contributions.tsv
-package-contributions.tsv
-vulnerability-layer-contributions.tsv
-remaining-wolfi-findings.tsv
-image-metrics.tsv
-image-layer-contributions.tsv
-native-tool-probe-contributions.tsv
-equivalent-boundary-comparison.tsv
-```
-
-The comparison labels the release gate `PASS` only when that acceptance file
-was actually evaluated and its final-image manifest, Critical/High occurrence
-and unique-CVE counts, report identities, and report hashes agree with the
-verified frozen raw scan context. A deliberately skipped gate is reported as
-`NOT_EVALUATED`; an acceptance result without verified suite context is
-`UNVERIFIED`. A standalone or stale `passed: true` value is not accepted as
-proof.
-
-For a disconnected rescan, first transfer a populated dedicated Trivy cache,
-then use `./scripts/wolfi/scan.sh --skip-db-download`. The command refuses a
-cache that lacks either required database identity.
-
-## Architectures, WSL, and Current Limits
-
-`linux/amd64` and `linux/arm64` are supported targets, but one YAML/lock pair
-and the unqualified local image tags represent one platform at a time. Artifact
-payloads are platform-qualified under `artifacts/wolfi/linux-amd64/` or
-`artifacts/wolfi/linux-arm64/`; the default scan and comparison directories are
-not. Prepare the architectures sequentially:
-
-1. Finish and archive the current lock, reports, and any image exports that
-   must be retained.
-2. Stop/remove containers using the Wolfi images. Either remove the three final
-   tags and their `-core`/`-probe-*` tags, or assign a distinct
-   `images.version` before building the second architecture.
-3. Change `images.platform` in the YAML, rerun `update-lock.sh`, and repeat the
-   frozen prefetch, build, test, scan, and comparison workflow.
-
-`./scripts/clean.sh` is the broad reset option: it removes the whole generated
-`artifacts/` tree, `.tmp/`, and `node_modules/`, including Ubuntu artifacts. It
-does not currently select Wolfi image tags for removal. Run `npm ci` again
-before the next lock update if this cleanup path is used.
-
-WSL packaging and Windows-side setup are deliberately outside this Wolfi
-branch. Continue to use the existing Ubuntu WSL workflow when those transfer
-artifacts are required.
-
-The implemented tests start the packaged VS Code Server with networking
-disabled and exercise an HTTP request over its Unix socket, demonstrating that
-another server download is not required. The disposable extension pass verifies
-checksums, installs and lists the server extensions, validates extracted client
-VSIX files, and starts representative packaged services. This includes the
-Rust Analyzer LSP handshake described above. It does not claim a real
-connection from the managed desktop VS Code client or full VS Code
-extension-host activation; those are host-side, environment-dependent
-boundaries. Multi-architecture manifests and registry publishing are outside
-the current local workflow. Treat successful build/tests as functional
-evidence; current CVE and size conclusions are generated locally by the
-scan/compare workflow and remain separate security acceptance evidence.
+Each profile describes one architecture at a time. Keep artifacts
+platform-qualified; archive locks/reports and process architecture changes
+sequentially because its output tag and companion lock are single-target. Rust
+prefetch never executes a foreign-architecture installer on the preparation
+host; it uses a target-platform Docker build/create/copy workflow instead.

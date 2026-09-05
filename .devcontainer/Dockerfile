@@ -1,19 +1,18 @@
-FROM mcr.microsoft.com/devcontainers/base:3.0.3-ubuntu22.04
+FROM cgr.dev/chainguard/wolfi-base:latest
 
+# The connected editor bootstrap is independent of the frozen output images.
 USER root
+RUN apk add --no-cache bash ca-certificates coreutils curl findutils git grep \
+    gnutar gzip xz zip unzip jq nodejs-24 npm-12 python-3.13 shadow sudo socat \
+    docker-cli docker-cli-buildx docker-compose posix-libc-utils util-linux
+RUN mkdir -p /usr/local/bin && ln -sf /usr/bin/python3.13 /usr/local/bin/python3
+COPY src/wolfi/components/base/identity.sh /tmp/wolfi-identity.sh
+RUN /bin/sh /tmp/wolfi-identity.sh vscode 1000 1000 true && rm /tmp/wolfi-identity.sh
+COPY src/wolfi/components/docker/feature /tmp/wolfi-docker-runtime
+RUN /bin/sh /tmp/wolfi-docker-runtime/install.sh && rm -rf /tmp/wolfi-docker-runtime
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        jq \
-        make \
-        shellcheck \
-        ca-certificates \
-        curl \
-        git \
-        less \
-        vim-tiny \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+ARG DEVCONTAINERS_CLI_VERSION=0.89.0
+RUN npm install --global --no-audit --no-fund @devcontainers/cli@${DEVCONTAINERS_CLI_VERSION}
 
 ARG TARGETARCH
 ARG TRIVY_VERSION=0.74.0
@@ -43,11 +42,26 @@ RUN set -eux; \
     rm -f "${trivy_archive}"; \
     trivy --version
 
-ENV TRIVY_CACHE_DIR=/home/vscode/.cache/trivy
 
-RUN mkdir -p "${TRIVY_CACHE_DIR}" \
-    && chown vscode:vscode "${TRIVY_CACHE_DIR}"
+ARG SHELLCHECK_VERSION=0.11.0
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) shellcheck_arch=x86_64; shellcheck_sha256=8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198 ;; \
+      arm64) shellcheck_arch=aarch64; shellcheck_sha256=12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588 ;; \
+      *) exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${shellcheck_arch}.tar.xz" -o /tmp/shellcheck.tar.xz; \
+    echo "${shellcheck_sha256}  /tmp/shellcheck.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/shellcheck.tar.xz -C /tmp; \
+    install -m 0755 "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck; \
+    rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
 
+ENV TRIVY_CACHE_DIR=/home/vscode/.cache/trivy \
+    HOME=/home/vscode \
+    DOCKER_HOST=unix:///var/run/docker.sock \
+    WOLFI_DOD_REMOTE_USER=vscode
+RUN mkdir -p "${TRIVY_CACHE_DIR}" && chown vscode:vscode "${TRIVY_CACHE_DIR}"
 USER vscode
-
 WORKDIR /workspaces
+ENTRYPOINT ["/usr/local/share/wolfi-dod/docker-socket-proxy-entrypoint.sh"]
+CMD ["/bin/bash"]

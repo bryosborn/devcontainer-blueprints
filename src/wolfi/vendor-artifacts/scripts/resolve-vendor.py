@@ -12,10 +12,8 @@ import argparse
 import hashlib
 import json
 import os
-import shlex
 import shutil
 import subprocess
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -51,6 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact-root", required=True, type=Path)
     parser.add_argument("--fragment", required=True, type=Path)
     parser.add_argument("--repo-root", required=True, type=Path)
+    parser.add_argument("--base-image", help="Digest-pinned Wolfi base for cross-architecture Rust prefetch")
     return parser.parse_args()
 
 
@@ -129,7 +128,7 @@ def download_locked(url: str, destination: Path, expected_hash: str = "") -> str
 
 def resolve_vscode(
     config: dict[str, Any], artifact_root: Path, repo_root: Path, platform: dict[str, str]
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     vscode = config["vscode"]
     version = vscode["version"]
     quality = vscode["quality"]
@@ -207,25 +206,19 @@ def resolve_vscode(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
+    if not vscode.get("extensions"):
+        return metadata, None
+
     extension_root = artifact_root / "vscode-extensions"
     extension_source = artifact_root / "resolver-inputs" / "vscode-extensions.txt"
-    extension_env = artifact_root / "resolver-inputs" / "vscode-extensions.env"
     extension_source.parent.mkdir(parents=True, exist_ok=True)
     extension_source.write_text(
         "\n".join(vscode["extensions"]) + "\n", encoding="utf-8"
     )
-    extension_env.write_text(
-        "VSCODE_EXTENSIONS_ARCHIVE_NAME=vscode-extensions.tar.gz\n"
-        "VSCODE_EXTENSIONS_CONTAINER_ONLY=true\n"
-        "VSCODE_EXTENSIONS_INCLUDE_PRERELEASE=false\n",
-        encoding="utf-8",
-    )
     run(
         [
             "node",
-            str(repo_root / "src/base-vscode/scripts/prefetch-extensions.mjs"),
-            "--env-file",
-            str(extension_env),
+            str(repo_root / "src/wolfi/components/vscode/prefetch-extensions.mjs"),
             "--vscode-version",
             str(product_version),
             "--vscode-commit",
@@ -339,43 +332,32 @@ def validate_rust_source(
 
 
 def generate_rust_source(
-    config: dict[str, Any], repo_root: Path, destination: Path, platform: str
+    config: dict[str, Any], repo_root: Path, destination: Path,
+    base_image: str | None, rustup_init: Path, rustup_hash: str,
 ) -> Path:
     rust = config["toolchain"]["rust"]
-    with tempfile.TemporaryDirectory(prefix="wolfi-rust-resolver-") as temp_name:
-        temporary = Path(temp_name)
-        docker_env = temporary / "docker.env"
-        toolchain_env = temporary / "toolchain.env"
-        docker_env.write_text(
-            f"DOCKER_PLATFORM={platform}\n"
-            "UPSTREAM_BASE_IMAGE=mcr.microsoft.com/devcontainers/base:3.0-ubuntu22.04\n",
-            encoding="utf-8",
-        )
-        toolchain_env.write_text(
-            f"TOOLCHAIN_ARTIFACT_ROOT={shlex.quote(destination.as_posix())}\n"
-            "TOOLCHAIN_TEST_BASE_IMAGE=${UPSTREAM_BASE_IMAGE}\n"
-            f"RUST_TOOLCHAIN={shlex.quote(rust['toolchain'])}\n"
-            f"RUST_COMPONENTS={shlex.quote(' '.join(rust['components']))}\n"
-            "RUSTUP_HOME=/usr/local/rustup\n"
-            "CARGO_HOME=/usr/local/cargo\n"
-            "RUSTUP_INIT_VERSION=1.29.1\n"
-            "RUSTUP_INIT_SHA256=\n",
-            encoding="utf-8",
-        )
-        environment = os.environ.copy()
-        environment["DOCKER_ENV_FILE"] = str(docker_env)
-        environment["TOOLCHAIN_ENV_FILE"] = str(toolchain_env)
-        subprocess.run(
-            [str(repo_root / "src/tool-artifacts/rust/scripts/prefetch.sh")],
-            check=True,
-            cwd=repo_root,
-            env=environment,
-        )
-    return destination / "rust"
+    if not base_image or "@sha256:" not in base_image:
+        raise SystemExit("ERROR: Rust resolution requires --base-image with the pinned Wolfi digest")
+    run(
+        [
+            str(repo_root / "src/wolfi/components/rust/prefetch.sh"),
+            "--artifact-root", str(destination),
+            "--platform", config["image"]["platform"],
+            "--base-image", base_image,
+            "--toolchain", rust["toolchain"],
+            "--components", " ".join(rust["components"]),
+            "--rustup-init", str(rustup_init),
+            "--rustup-init-sha256", rustup_hash,
+            "--rustup-init-version", "1.29.1",
+        ],
+        cwd=repo_root,
+    )
+    return destination
 
 
 def resolve_rust(
-    config: dict[str, Any], artifact_root: Path, repo_root: Path, platform: dict[str, str]
+    config: dict[str, Any], artifact_root: Path, repo_root: Path, platform: dict[str, str],
+    base_image: str | None,
 ) -> dict[str, Any]:
     rust_config = config["toolchain"]["rust"]
     toolchain = rust_config["toolchain"]
@@ -384,6 +366,7 @@ def resolve_rust(
     destination_dir = artifact_root / "rust" / toolchain / target_triple
     archive = destination_dir / "rust-toolchain.tar.gz"
     metadata_path = destination_dir / "metadata.json"
+    generated_root = artifact_root / "resolver-rust-source"
 
     cached_metadata: dict[str, Any] | None = None
     if archive.is_file() and metadata_path.is_file():
@@ -400,17 +383,28 @@ def resolve_rust(
             cached_metadata = None
     if cached_metadata is not None:
         cached_metadata["file"] = relative_to_repo(archive, repo_root)
+        metadata_path.write_text(
+            json.dumps(cached_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        if generated_root.exists():
+            shutil.rmtree(generated_root)
         return cached_metadata
 
-    existing = repo_root / "artifacts/toolchain/rust"
-    if validate_rust_source(existing, toolchain, components, target_triple):
-        source = existing
-    else:
-        generated_root = artifact_root / "resolver-rust-source"
-        shutil.rmtree(generated_root, ignore_errors=True)
-        source = generate_rust_source(config, repo_root, generated_root, config["images"]["platform"])
-        if not validate_rust_source(source, toolchain, components, target_triple):
-            raise SystemExit("ERROR: generated Rust artifact tree did not match the request")
+    rustup_init_version = "1.29.1"
+    rustup_url = (
+        "https://static.rust-lang.org/rustup/archive/"
+        f"{rustup_init_version}/{target_triple}/rustup-init"
+    )
+    published_checksum = fetch_bytes(f"{rustup_url}.sha256").decode("ascii").strip().split()[0]
+    if len(published_checksum) != 64 or any(c not in "0123456789abcdef" for c in published_checksum):
+        raise SystemExit("ERROR: invalid published rustup-init SHA256")
+    rustup_init = artifact_root / "rustup-init" / rustup_init_version / target_triple / "rustup-init"
+    download_locked(rustup_url, rustup_init, published_checksum)
+    rustup_init.chmod(0o755)
+    shutil.rmtree(generated_root, ignore_errors=True)
+    source = generate_rust_source(config, repo_root, generated_root, base_image, rustup_init, published_checksum)
+    if not validate_rust_source(source, toolchain, components, target_triple):
+        raise SystemExit("ERROR: generated Rust artifact tree did not match the request")
 
     destination_dir.mkdir(parents=True, exist_ok=True)
     temporary_archive = destination_dir / ".rust-toolchain.tar.gz.tmp"
@@ -442,14 +436,6 @@ def resolve_rust(
             raise SystemExit("ERROR: failed to package the Rust artifact tree")
     os.replace(temporary_archive, archive)
 
-    rustup_init_version = "1.29.1"
-    rustup_url = (
-        "https://static.rust-lang.org/rustup/archive/"
-        f"{rustup_init_version}/{target_triple}/rustup-init"
-    )
-    published_checksum = (
-        fetch_bytes(f"{rustup_url}.sha256").decode("ascii").strip().split()[0]
-    )
     metadata = {
         "toolchain": toolchain,
         "components": components,
@@ -467,6 +453,7 @@ def resolve_rust(
     metadata_path.write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    shutil.rmtree(generated_root)
     return metadata
 
 
@@ -479,16 +466,17 @@ def main() -> None:
         config = json.loads(args.config_json.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise SystemExit(f"ERROR: cannot read normalized config: {error}") from error
-    platform_name = config["images"]["platform"]
+    platform_name = config["image"]["platform"]
     if platform_name not in PLATFORMS:
         raise SystemExit(f"ERROR: unsupported target platform: {platform_name}")
     platform = PLATFORMS[platform_name]
 
-    vscode, extensions = resolve_vscode(config, artifact_root, repo_root, platform)
-    resolved: dict[str, Any] = {
-        "vscode": vscode,
-        "extensions": extensions,
-    }
+    resolved: dict[str, Any] = {}
+    if "vscode" in config:
+        vscode, extensions = resolve_vscode(config, artifact_root, repo_root, platform)
+        resolved["vscode"] = vscode
+        if extensions is not None:
+            resolved["extensions"] = extensions
     if "kubectl" in config["toolchain"]:
         resolved["kubectl"] = resolve_kubectl(
             config["toolchain"]["kubectl"],
@@ -497,7 +485,7 @@ def main() -> None:
             platform["kubectl"],
         )
     if "rust" in config["toolchain"]:
-        resolved["rust"] = resolve_rust(config, artifact_root, repo_root, platform)
+        resolved["rust"] = resolve_rust(config, artifact_root, repo_root, platform, args.base_image)
 
     fragment = {
         "schemaVersion": 1,

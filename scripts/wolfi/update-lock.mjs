@@ -8,19 +8,19 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   DEFAULT_CONFIG_PATH,
-  DEFAULT_LOCK_PATH,
+  companionLockPath,
   REPO_ROOT,
   WolfiConfigError,
   loadWolfiConfig,
   splitMutableImageReference,
   verifyWolfiLock,
   wolfiConfigSemanticSha256,
-  wolfiImageReferences
+  wolfiImageReference
 } from "./config.mjs";
 
 const require = createRequire(import.meta.url);
 const YAML_PACKAGE_VERSION = require("yaml/package.json").version;
-const LOCK_GENERATOR_VERSION = 1;
+const LOCK_GENERATOR_VERSION = 2;
 const OCI_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 function run(command, args) {
@@ -91,7 +91,7 @@ export function resolveBaseImage(config, { inspectManifest } = {}) {
     }
   });
 
-  const selected = selectPlatformManifest(inspect(requested.reference), config.images.platform);
+  const selected = selectPlatformManifest(inspect(requested.reference), config.image.platform);
   if (typeof selected.mediaType !== "string" || selected.mediaType.length === 0) {
     throw new WolfiConfigError("base-image resolver did not return a manifest media type");
   }
@@ -99,7 +99,7 @@ export function resolveBaseImage(config, { inspectManifest } = {}) {
   return {
     requested: requested.reference,
     repository: requested.repository,
-    platform: config.images.platform,
+    platform: config.image.platform,
     digest: selected.digest,
     pinnedReference: `${requested.repository}@${selected.digest}`,
     mediaType: selected.mediaType,
@@ -258,7 +258,7 @@ export function createWolfiLock(config, {
   const { resolved, metadata } = mergeResolutionStages([baseStage, ...resolutionStages]);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt,
     source: {
       path: relativeSourcePath(configPath),
@@ -276,7 +276,7 @@ export function createWolfiLock(config, {
       stages: metadata
     },
     config,
-    images: wolfiImageReferences(config),
+    image: wolfiImageReference(config),
     resolved
   };
 }
@@ -301,9 +301,10 @@ function writeJsonAtomically(outputPath, value) {
 
 function parseArguments(argv) {
   const options = {
-    configPath: DEFAULT_CONFIG_PATH,
-    lockPath: DEFAULT_LOCK_PATH,
+    configPath: null,
+    lockPath: null,
     baseLockPath: null,
+    baseOnly: false,
     fragmentPaths: []
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -329,7 +330,18 @@ function parseArguments(argv) {
       options.help = true;
       continue;
     }
+    if (argument === "--base-only") {
+      options.baseOnly = true;
+      continue;
+    }
     throw new WolfiConfigError(`unknown argument: ${argument}`);
+  }
+  if (!options.help) {
+    if (options.configPath == null) throw new WolfiConfigError("--config is required");
+    if (options.baseOnly && (options.baseLockPath != null || options.fragmentPaths.length > 0)) {
+      throw new WolfiConfigError("--base-only cannot merge a base lock or resolution fragments");
+    }
+    options.lockPath ??= companionLockPath(options.configPath);
   }
   return options;
 }
@@ -338,9 +350,10 @@ function printUsage() {
   console.log(`Usage: ./scripts/wolfi/update-lock.sh [options]
 
 Options:
-  --config PATH           Source YAML (default: config/wolfi-build.yaml)
-  --lock PATH             Generated lockfile (default: config/wolfi-build.lock.json)
+  --config PATH           Source YAML (required)
+  --lock PATH             Generated lockfile (default: selected YAML basename + .lock.json)
   --base-lock PATH        Reuse base resolution from an earlier verified lock
+  --base-only             Write the internal base-resolution intermediate
   --resolution-file PATH  Merge a real resolver-produced JSON fragment; repeatable
   --help                  Show this help
 
@@ -373,7 +386,7 @@ async function main(argv) {
     } catch (error) {
       throw new WolfiConfigError(`cannot read base lock ${options.baseLockPath}: ${error.message}`);
     }
-    verifyWolfiLock(config, baseLock);
+    verifyWolfiLock(config, baseLock, { requireArtifacts: false });
     baseImage = baseLock.resolved.baseImage;
   }
   const externalStages = options.fragmentPaths.map((fragmentPath) => {
@@ -397,7 +410,7 @@ async function main(argv) {
     resolutionStages: externalStages,
     runtime
   });
-  verifyWolfiLock(config, lock);
+  verifyWolfiLock(config, lock, { requireArtifacts: !options.baseOnly });
   writeJsonAtomically(options.lockPath, lock);
   console.log(`Wrote ${relativeSourcePath(options.lockPath)}`);
   console.log(`  config SHA256: ${lock.source.semanticSha256}`);

@@ -8,7 +8,7 @@ usage() {
 Usage: test-offline-install.sh --lock PATH --config-sha256 HEX --artifact-root PATH
 
 First verifies the frozen Wolfi supply, then performs network-disabled installs
-of the exact DOD and all-enabled toolchain closures using only locked signed
+of the exact final image closure using only locked signed
 indexes, keys, and APK files.
 EOF
 }
@@ -36,6 +36,7 @@ for value_name in lock_file config_sha256 artifact_root; do
 done
 
 "${SCRIPT_DIR}/prefetch-frozen.sh" \
+  --offline \
   --lock "${lock_file}" \
   --config-sha256 "${config_sha256}" \
   --artifact-root "${artifact_root}"

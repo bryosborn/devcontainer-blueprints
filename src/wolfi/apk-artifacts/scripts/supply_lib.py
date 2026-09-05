@@ -406,6 +406,7 @@ def expand_package_roots(
             "nameTemplate",
             "repository",
             "configPath",
+            "unlessConfigPath",
             "each",
             "validateSelector",
         }
@@ -422,6 +423,14 @@ def expand_package_roots(
             raise SupplyError(f"{location} must define exactly one of name or nameTemplate")
         known_modules.add(module)
 
+        excluded_path = entry.get("unlessConfigPath")
+        if excluded_path is not None:
+            if not isinstance(excluded_path, str) or not excluded_path:
+                raise SupplyError(f"{location}.unlessConfigPath is invalid")
+            present, configured = get_config_path(config, excluded_path)
+            if present and configured is not False:
+                continue
+
         config_path = entry.get("configPath")
         if config_path is None:
             selectors: list[Any] = ["latest"]
@@ -429,7 +438,7 @@ def expand_package_roots(
             if not isinstance(config_path, str) or not config_path:
                 raise SupplyError(f"{location}.configPath is invalid")
             present, configured = get_config_path(config, config_path)
-            if not present:
+            if not present or configured is False:
                 continue
             if entry.get("each", False):
                 if not isinstance(configured, list) or not configured:
@@ -486,7 +495,7 @@ def expand_package_roots(
             root["module"] for root in roots if root["module"] in modules
         }
         if enabled_modules:
-            package_sets[set_name] = list(dict.fromkeys(modules))
+            package_sets[set_name] = [module for module in dict.fromkeys(modules) if module in enabled_modules]
 
     return sorted(roots, key=lambda item: (item["module"], item["name"])), package_sets
 
@@ -506,3 +515,22 @@ def roots_for_modules(
             )
         by_name[root["name"]] = root
     return [by_name[name] for name in sorted(by_name)]
+
+
+def validate_selected_package_set(config: dict[str, Any], package_sets: Any) -> None:
+    """Reject stale or extra package roots even when artifact bytes are valid."""
+    if not isinstance(package_sets, dict) or set(package_sets) != {"final"}:
+        raise SupplyError("Wolfi lock must contain exactly the selected final APK package set")
+    mapping = load_package_mapping(Path(__file__).resolve().parent.parent / "package-roots.json")
+    roots, enabled_sets = expand_package_roots(config, mapping)
+    selected_roots = roots_for_modules(roots, enabled_sets["final"])
+    final = package_sets["final"]
+    if not isinstance(final, dict) or final.get("modules") != enabled_sets["final"]:
+        raise SupplyError("final APK modules differ from the configured selection")
+    locked_roots = final.get("roots")
+    if not isinstance(locked_roots, list) or any(not isinstance(root, dict) for root in locked_roots):
+        raise SupplyError("final APK roots must be an array of records")
+    expected = [(root["module"], root["name"], root["repository"], root["selector"]) for root in selected_roots]
+    actual = [(root.get("module"), root.get("requestedName"), root.get("repository"), root.get("requestedSelector")) for root in locked_roots]
+    if actual != expected:
+        raise SupplyError("final APK roots differ from the configured selection")

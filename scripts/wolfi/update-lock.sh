@@ -6,8 +6,8 @@ usage() {
 Usage: ./scripts/wolfi/update-lock.sh [options]
 
 Options:
-  --config PATH           Source YAML (default: config/wolfi-build.yaml).
-  --lock PATH             Generated lock (default: config/wolfi-build.lock.json).
+  --config PATH           Source YAML (required).
+  --lock PATH             Generated lock (default: selected YAML basename + .lock.json).
   --resolution-file PATH  Add an advanced resolver fragment (repeatable).
   --keep-workspace        Preserve intermediate resolver files under .tmp/.
   -h, --help              Show this help.
@@ -21,8 +21,8 @@ EOF
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-CONFIG_FILE="${WOLFI_BUILD_CONFIG:-${REPO_ROOT}/config/wolfi-build.yaml}"
-LOCK_FILE="${WOLFI_LOCK_FILE:-${REPO_ROOT}/config/wolfi-build.lock.json}"
+CONFIG_FILE=""
+LOCK_FILE=""
 KEEP_WORKSPACE=false
 EXTRA_FRAGMENTS=()
 
@@ -57,15 +57,9 @@ while (($# > 0)); do
   esac
 done
 
-if [[ "${CONFIG_FILE}" != /* ]]; then
-  CONFIG_FILE="${REPO_ROOT}/${CONFIG_FILE}"
-fi
-if [[ "${LOCK_FILE}" != /* ]]; then
-  LOCK_FILE="${REPO_ROOT}/${LOCK_FILE}"
-fi
-
 # shellcheck source=scripts/wolfi/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
+wolfi_init_paths "${REPO_ROOT}" "${CONFIG_FILE}" "${LOCK_FILE}"
 wolfi_require_commands docker jq node npm python3 sha256sum
 
 [[ -f "${CONFIG_FILE}" ]] || {
@@ -101,11 +95,12 @@ CONFIG_HASH="$(node "${SCRIPT_DIR}/config.mjs" hash "${CONFIG_FILE}")"
 # two different base snapshots.
 node "${SCRIPT_DIR}/update-lock.mjs" \
   --config "${CONFIG_FILE}" \
-  --lock "${BASE_LOCK}"
+  --lock "${BASE_LOCK}" \
+  --base-only
 
 BASE_IMAGE="$(jq -er '.resolved.baseImage.pinnedReference' "${BASE_LOCK}")"
 BASE_DIGEST="$(jq -er '.resolved.baseImage.digest' "${BASE_LOCK}")"
-PLATFORM="$(jq -er '.images.platform' "${CONFIG_JSON}")"
+PLATFORM="$(jq -er '.image.platform' "${CONFIG_JSON}")"
 ARTIFACT_LOCK_ROOT="$(jq -er '.artifacts.root' "${CONFIG_JSON}")"
 MAIN_REPOSITORY="$(jq -er '.wolfi.repositories.main' "${CONFIG_JSON}")"
 EXTRA_REPOSITORY="$(jq -er '.wolfi.repositories.extra' "${CONFIG_JSON}")"
@@ -124,20 +119,24 @@ ARTIFACT_ROOT="$(wolfi_abs_path "${REPO_ROOT}" "${ARTIFACT_LOCK_ROOT}")"
   --fragment "${APK_FRAGMENT}"
 
 PLATFORM_SLUG="$(wolfi_platform_slug "${PLATFORM}")"
-python3 "${REPO_ROOT}/src/wolfi/vendor-artifacts/scripts/resolve-vendor.py" \
-  --config-json "${CONFIG_JSON}" \
-  --config-hash "${CONFIG_HASH}" \
-  --artifact-root "${ARTIFACT_ROOT}/${PLATFORM_SLUG}/vendor" \
-  --fragment "${VENDOR_FRAGMENT}" \
-  --repo-root "${REPO_ROOT}"
-
 UPDATE_ARGS=(
   --config "${CONFIG_FILE}"
   --lock "${LOCK_FILE}"
   --base-lock "${BASE_LOCK}"
   --resolution-file "${APK_FRAGMENT}"
-  --resolution-file "${VENDOR_FRAGMENT}"
 )
+if jq -e 'has("vscode") or (.toolchain | has("kubectl") or has("rust"))' "${CONFIG_JSON}" >/dev/null; then
+  python3 "${REPO_ROOT}/src/wolfi/vendor-artifacts/scripts/resolve-vendor.py" \
+    --config-json "${CONFIG_JSON}" \
+    --config-hash "${CONFIG_HASH}" \
+    --base-image "${BASE_IMAGE}" \
+    --artifact-root "${ARTIFACT_ROOT}/${PLATFORM_SLUG}/vendor" \
+    --fragment "${VENDOR_FRAGMENT}" \
+    --repo-root "${REPO_ROOT}"
+  if jq -e '.resolved | length > 0' "${VENDOR_FRAGMENT}" >/dev/null; then
+    UPDATE_ARGS+=(--resolution-file "${VENDOR_FRAGMENT}")
+  fi
+fi
 for fragment in "${EXTRA_FRAGMENTS[@]}"; do
   UPDATE_ARGS+=(--resolution-file "${fragment}")
 done

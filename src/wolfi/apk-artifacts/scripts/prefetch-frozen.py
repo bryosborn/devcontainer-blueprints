@@ -33,6 +33,7 @@ from supply_lib import (
     sha256_file,
     validate_https_repository,
     validate_pinned_image,
+    validate_selected_package_set,
 )
 
 
@@ -45,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lock", required=True, type=Path)
     parser.add_argument("--config-sha256", required=True)
     parser.add_argument("--artifact-root", required=True, type=Path)
+    parser.add_argument("--offline", action="store_true", help="Verify local bytes only; never fetch or regenerate missing artifacts.")
     return parser.parse_args()
 
 
@@ -91,11 +93,14 @@ def fetch_missing_locked_file(
     expected_hash: Any,
     expected_size: Any,
     location: str,
+    offline: bool = False,
 ) -> bool:
     require_sha256(expected_hash, f"{location} SHA256")
     if path.exists() or path.is_symlink():
         verify_file(path, expected_hash, expected_size, location)
         return False
+    if offline:
+        raise SupplyError(f"{location} is missing in offline mode: {path}; run prefetch on a connected machine")
     download(url, path, expected_sha256=expected_hash)
     verify_file(path, expected_hash, expected_size, location)
     return True
@@ -283,7 +288,7 @@ def regenerate_base_artifact(
 
 
 def ensure_base_image(
-    *, artifact: dict[str, Any], platform_root: Path, platform: str
+    *, artifact: dict[str, Any], platform_root: Path, platform: str, offline: bool = False
 ) -> None:
     base_file = path_beneath(platform_root, artifact["file"], "base artifact file")
     local_reference = require_string(artifact.get("localReference"), "base localReference")
@@ -303,6 +308,8 @@ def ensure_base_image(
         )
 
     if not base_file.exists() and not base_file.is_symlink():
+        if offline:
+            raise SupplyError(f"base artifact is missing in offline mode: {base_file}")
         if local_metadata is None:
             regenerate_base_artifact(
                 artifact=artifact, platform_root=platform_root, platform=platform
@@ -399,13 +406,15 @@ def extract_base_keys(base_image: str, platform: str, destination: Path) -> None
 
 
 def ensure_keys(
-    *, records: list[Any], apk_root: Path, base_image: str, platform: str
+    *, records: list[Any], apk_root: Path, base_image: str, platform: str, offline: bool = False
 ) -> None:
     missing = False
     for index, raw_record in enumerate(records):
         record = require_mapping(raw_record, f"apk.keys[{index}]")
         path = path_beneath(apk_root, record.get("file"), f"apk.keys[{index}].file")
         if not path.exists() and not path.is_symlink():
+            if offline:
+                raise SupplyError(f"APK key is missing in offline mode: {path}")
             missing = True
             continue
         verify_file(path, record.get("sha256"), record.get("size"), f"APK key {index}")
@@ -500,14 +509,16 @@ def verify_index_signatures(
 
 
 def validate_and_fetch_supply(
-    *, lock: dict[str, Any], expected_hash: str, artifact_root: Path
+    *, lock: dict[str, Any], expected_hash: str, artifact_root: Path, offline: bool = False
 ) -> tuple[dict[str, Any], Path, str, str]:
-    if lock.get("schemaVersion") != 1:
-        raise SupplyError("Wolfi lock schemaVersion must be 1")
+    if lock.get("schemaVersion") != 2:
+        raise SupplyError("Wolfi lock schemaVersion must be 2")
     source = require_mapping(lock.get("source"), "lock.source")
     if source.get("semanticSha256") != expected_hash:
         raise SupplyError("lock semantic hash does not match --config-sha256")
     config = require_mapping(lock.get("config"), "lock.config")
+    if config.get("schemaVersion") != 2 or lock.get("image") != config.get("image"):
+        raise SupplyError("lock image identity differs from its schema-2 configuration")
     if canonical_json_sha256(config) != expected_hash:
         raise SupplyError("embedded lock config does not match its semantic SHA256")
     configured_artifact_root = require_relative_path(
@@ -515,7 +526,7 @@ def validate_and_fetch_supply(
         "lock.config.artifacts.root",
     ).as_posix()
     platform, architecture = require_platform(
-        require_mapping(config.get("images"), "lock.config.images").get("platform")
+        require_mapping(config.get("image"), "lock.config.image").get("platform")
     )
     slug = platform_key(platform)
     resolved = require_mapping(lock.get("resolved"), "lock.resolved")
@@ -526,6 +537,7 @@ def validate_and_fetch_supply(
     if base_resolution.get("platform") != platform:
         raise SupplyError("resolved base-image platform differs from config")
     apk = require_mapping(resolved.get("apk"), "lock.resolved.apk")
+    validate_selected_package_set(config, apk.get("packageSets"))
     if apk.get("schemaVersion") != 1:
         raise SupplyError("lock.resolved.apk.schemaVersion must be 1")
     if apk.get("platform") != platform or apk.get("architecture") != architecture:
@@ -556,7 +568,7 @@ def validate_and_fetch_supply(
     if artifact.get("pinnedReference") != pinned_reference or artifact.get("digest") != digest:
         raise SupplyError("base artifact pin differs from resolved.baseImage")
 
-    ensure_base_image(artifact=artifact, platform_root=platform_root, platform=platform)
+    ensure_base_image(artifact=artifact, platform_root=platform_root, platform=platform, offline=offline)
 
     configured_repositories = require_mapping(
         wolfi_config.get("repositories"),
@@ -621,6 +633,7 @@ def validate_and_fetch_supply(
             expected_hash=digest_value,
             expected_size=size,
             location=location,
+            offline=offline,
         )
 
     with ThreadPoolExecutor(max_workers=min(8, len(fetches))) as executor:
@@ -631,7 +644,7 @@ def validate_and_fetch_supply(
         raise SupplyError("lock.resolved.apk.keys must not be empty")
     local_base = require_string(artifact.get("localReference"), "base localReference")
     ensure_keys(
-        records=keys, apk_root=apk_root, base_image=local_base, platform=platform
+        records=keys, apk_root=apk_root, base_image=local_base, platform=platform, offline=offline
     )
 
     key_by_name: dict[str, dict[str, Any]] = {}
@@ -692,6 +705,8 @@ def validate_and_fetch_supply(
         packages_by_id[expected_id] = record
 
     package_sets = require_mapping(apk.get("packageSets"), "lock.resolved.apk.packageSets")
+    if set(package_sets) != {"final"}:
+        raise SupplyError("Wolfi lock must contain exactly the selected final APK package set")
     for set_name, raw_set in package_sets.items():
         package_set = require_mapping(raw_set, f"apk.packageSets.{set_name}")
         if package_set.get("artifactDirectory") != expected_apk_directory:
@@ -745,6 +760,7 @@ def main() -> None:
             lock=lock,
             expected_hash=expected_hash,
             artifact_root=args.artifact_root,
+            offline=args.offline,
         )
     except SupplyError as error:
         raise SystemExit(f"ERROR: {error}") from error

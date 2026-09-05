@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install locked DOD and all-enabled toolchain closures from signed local repos."""
+"""Install the selected final APK closure from signed local repositories."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from supply_lib import (
 
 
 PACKAGE_SET_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-TESTED_PACKAGE_SETS = ("dod", "vscode", "toolchain")
+TESTED_PACKAGE_SETS = ("final",)
 
 
 def parse_args() -> argparse.Namespace:
@@ -264,7 +264,7 @@ def main() -> None:
             raise SupplyError("lock semantic hash does not match --config-sha256")
         config = require_mapping(lock.get("config"), "lock.config")
         platform, architecture = require_platform(
-            require_mapping(config.get("images"), "lock.config.images").get("platform")
+            require_mapping(config.get("image"), "lock.config.image").get("platform")
         )
         apk = require_mapping(
             require_mapping(lock.get("resolved"), "lock.resolved").get("apk"),

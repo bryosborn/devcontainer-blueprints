@@ -10,7 +10,7 @@ Options:
   --image IMAGE          Docker image to scan. May be repeated.
   --images IMAGES        Whitespace-separated Docker image references.
   --output-dir DIR       Report directory. Defaults to artifacts/trivy-output.
-  --ignore-policy FILE   Trivy Rego ignore policy. Defaults to config/trivy-ignore.rego.
+  --ignore-policy FILE   Optional policy for a diagnostic scan.
   --no-ignore-policy     Run a raw scan without an ignore policy.
   --skip-file PATTERN    File/glob omitted from both reports. May be repeated.
   --skip-dir PATTERN     Directory/glob omitted from both reports. May be repeated.
@@ -22,18 +22,15 @@ Options:
   --scan-label LABEL     Human-readable context stored in scan-metadata.json.
   -h, --help             Show help.
 
-With no options, image references come from ARTIFACT_IMAGE_REFS in the normal
-Docker environment file and the existing Ubuntu report behavior is unchanged.
+Image references must be supplied explicitly. The profile workflow supplies
+its locked output image, platform, and frozen scanner settings.
 USAGE
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# shellcheck source=scripts/env.sh
-source "${REPO_ROOT}/scripts/env.sh"
-
 output_dir="${REPO_ROOT}/artifacts/trivy-output"
-ignore_policy="${REPO_ROOT}/config/trivy-ignore.rego"
+ignore_policy=""
 custom_images=0
 image_refs=()
 skip_files=()
@@ -163,12 +160,6 @@ case "${scan_platform}" in
     ;;
 esac
 
-if [[ "${custom_images}" -eq 0 ]]; then
-  load_env_file "${REPO_ROOT}"
-  require_env_vars ARTIFACT_IMAGE_REFS
-  read -r -a image_refs <<< "${ARTIFACT_IMAGE_REFS}"
-fi
-
 for command_name in docker trivy jq python3 sha256sum; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "ERROR: Required command not found: ${command_name}" >&2
@@ -190,7 +181,7 @@ done < <(compgen -e)
 
 if ((${#image_refs[@]} == 0)); then
   if [[ "${custom_images}" -eq 0 ]]; then
-    echo "ERROR: ARTIFACT_IMAGE_REFS does not contain any image references." >&2
+    echo "ERROR: Supply at least one --image reference." >&2
   else
     echo "ERROR: No Docker images were selected for scanning." >&2
   fi
@@ -256,7 +247,7 @@ if ((${#missing_images[@]} > 0)); then
   fi
   printf '  %s\n' "${missing_images[@]}" >&2
   if [[ "${custom_images}" -eq 0 ]]; then
-    echo "Run ./scripts/build-all.sh or ./scripts/load-artifacts.sh first." >&2
+    echo "Build or load the selected profile first." >&2
   else
     echo "Build or load the requested images first." >&2
   fi

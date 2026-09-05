@@ -13,7 +13,8 @@ import {
   validateWolfiConfig,
   verifyWolfiLock,
   wolfiConfigSemanticSha256,
-  wolfiImageReferences
+  companionLockPath,
+  wolfiImageReference
 } from "./config.mjs";
 import {
   createWolfiLock,
@@ -36,7 +37,7 @@ function baseResolution(config = validConfig) {
   return {
     requested: config.wolfi.baseImage,
     repository: "cgr.dev/chainguard/wolfi-base",
-    platform: config.images.platform,
+    platform: config.image.platform,
     digest: AMD64_DIGEST,
     pinnedReference: `cgr.dev/chainguard/wolfi-base@${AMD64_DIGEST}`,
     mediaType: "application/vnd.oci.image.manifest.v1+json",
@@ -63,8 +64,8 @@ function expectConfigError(fn, pattern) {
 }
 
 test("loads the repository Wolfi configuration", () => {
-  assert.equal(validConfig.schemaVersion, 1);
-  assert.equal(validConfig.images.platform, "linux/amd64");
+  assert.equal(validConfig.schemaVersion, 2);
+  assert.equal(validConfig.image.platform, "linux/amd64");
   assert.equal(validConfig.toolchain.helm, "4");
   assert.equal(validConfig.toolchain.oras, "1");
   assert.equal(validConfig.toolchain.mongosh, "2");
@@ -73,14 +74,115 @@ test("loads the repository Wolfi configuration", () => {
   assert.equal(validConfig.vscode.extensions.length, 15);
 });
 
+test("CI and development profiles select the same tools with isolated outputs", () => {
+  const ci = loadWolfiConfig(path.join(path.dirname(DEFAULT_CONFIG_PATH), "wolfi-ci.yaml"));
+  assert.deepEqual(ci.toolchain, validConfig.toolchain);
+  assert.equal(ci.devcontainer, false);
+  for (const key of ["user", "docker", "vscode"]) assert.equal(key in ci, false);
+  assert.notEqual(ci.artifacts.root, validConfig.artifacts.root);
+  assert.notEqual(ci.image.reference, validConfig.image.reference);
+});
+
+test("minimal profiles need no identity, editor, Docker, or toolchain", () => {
+  const config = clone(validConfig);
+  for (const key of ["user", "docker", "vscode", "toolchain", "devcontainer"]) delete config[key];
+  const normalized = validateWolfiConfig(config);
+  assert.deepEqual(normalized.toolchain, {});
+  assert.equal(normalized.devcontainer, false);
+  assert.equal("user" in normalized, false);
+  assert.equal("docker" in normalized, false);
+  assert.equal("vscode" in normalized, false);
+});
+
+test("VS Code alone has stable quality and no extension archive selection", () => {
+  const config = clone(validConfig);
+  config.vscode = { version: "1.136.1" };
+  assert.deepEqual(validateWolfiConfig(config).vscode, { version: "1.136.1", quality: "stable", extensions: [] });
+});
+
+test("Dev Container metadata requires an explicit non-root remote user", () => {
+  const config = clone(validConfig);
+  delete config.user;
+  delete config.docker;
+  expectConfigError(() => validateWolfiConfig(config), /devcontainer.*requires a configured non-root user/);
+});
+
+test("Docker clients are independent of socket integration", () => {
+  const config = clone(validConfig);
+  delete config.user;
+  config.devcontainer = false;
+  config.docker = { cli: "latest" };
+  assert.deepEqual(validateWolfiConfig(config).docker, { cli: "latest", socket: false });
+  config.docker = { compose: "latest" };
+  assert.deepEqual(validateWolfiConfig(config).docker, { compose: "latest", socket: false });
+  config.docker = { buildx: "latest" };
+  expectConfigError(() => validateWolfiConfig(config), /buildx.*requires docker.cli/);
+});
+
+test("socket integration validates CLI, remote identity, and devcontainer startup", () => {
+  for (const missing of ["cli", "user", "devcontainer"]) {
+    const config = clone(validConfig);
+    if (missing === "cli") delete config.docker.cli;
+    if (missing === "user") delete config.user;
+    if (missing === "devcontainer") config.devcontainer = false;
+    expectConfigError(() => validateWolfiConfig(config), /requires/);
+  }
+  const config = clone(validConfig);
+  config.docker.socket = "false";
+  expectConfigError(() => validateWolfiConfig(config), /must be a boolean/);
+});
+
+test("rejects null optional mappings and ambiguous legacy schema", () => {
+  for (const key of ["user", "docker", "vscode", "toolchain", "devcontainer"]) {
+    const config = clone(validConfig);
+    config[key] = null;
+    expectConfigError(() => validateWolfiConfig(config), /must be a mapping|must be a boolean/);
+  }
+  const config = clone(validConfig);
+  config.schemaVersion = 1;
+  expectConfigError(() => validateWolfiConfig(config), /migrate legacy/);
+});
+
+test("offline Rust analyzer extensions require the locked language server component", () => {
+  const config = clone(validConfig);
+  config.toolchain.rust.components = ["rust-src"];
+  expectConfigError(() => validateWolfiConfig(config), /rust-analyzer.*offline activation/);
+});
+
+test("Rust selectors must match the installer's dated nightly contract", () => {
+  for (const selector of ["stable", "beta", "nightly", "latest", "1.99.0", "nightly-2026-9-4", "nightly-2026-09-04-x86_64-unknown-linux-gnu"]) {
+    const config = clone(validConfig);
+    config.toolchain.rust.toolchain = selector;
+    expectConfigError(() => validateWolfiConfig(config), /toolchain\.rust\.toolchain: must be a dated nightly/);
+  }
+  const config = clone(validConfig);
+  config.toolchain.rust.toolchain = "nightly-2026-09-04";
+  assert.equal(validateWolfiConfig(config).toolchain.rust.toolchain, "nightly-2026-09-04");
+});
+
+test("Rust may select no optional components without an analyzer VSIX", () => {
+  const config = clone(validConfig);
+  delete config.vscode;
+  config.toolchain.rust.components = [];
+  assert.deepEqual(validateWolfiConfig(config).toolchain.rust.components, []);
+  config.vscode = { version: "1.136.1", extensions: ["rust-lang.rust-analyzer"] };
+  expectConfigError(() => validateWolfiConfig(config), /rust-analyzer.*offline activation/);
+});
+
+test("VS Code commit overrides are outside the schema", () => {
+  const config = clone(validConfig);
+  config.vscode.commit = "a".repeat(40);
+  expectConfigError(() => validateWolfiConfig(config), /vscode: unknown field: commit/);
+});
+
 test("rejects duplicate YAML mapping keys", () => {
-  const source = validSource.replace("schemaVersion: 1", "schemaVersion: 1\nschemaVersion: 1");
+  const source = validSource.replace("schemaVersion: 2", "schemaVersion: 2\nschemaVersion: 2");
   expectConfigError(() => parseWolfiConfig(source), /unique|Map keys must be unique/i);
 });
 
 test("rejects YAML aliases", () => {
   const source = validSource
-    .replace("schemaVersion: 1", "schemaVersion: &schema 1")
+    .replace("schemaVersion: 2", "schemaVersion: &schema 2")
     .replace("uid: 1000", "uid: *schema");
   expectConfigError(() => parseWolfiConfig(source), /aliases are not allowed/i);
 });
@@ -91,7 +193,7 @@ test("rejects YAML merge keys", () => {
 });
 
 test("rejects explicit and custom YAML tags", () => {
-  const source = validSource.replace("schemaVersion: 1", "schemaVersion: !integer 1");
+  const source = validSource.replace("schemaVersion: 2", "schemaVersion: !integer 2");
   expectConfigError(() => parseWolfiConfig(source), /tag/i);
 });
 
@@ -109,24 +211,24 @@ test("rejects missing required fields", () => {
 
 test("rejects interpolation in any validated string", () => {
   const config = clone(validConfig);
-  config.images.prefix = "${REGISTRY}";
+  config.image.reference = "${REGISTRY}/example:1";
   expectConfigError(() => validateWolfiConfig(config), /interpolation strings are not allowed/);
 });
 
-test("rejects invalid image names and prefixes", () => {
+test("rejects invalid image references and registry ports", () => {
   const config = clone(validConfig);
-  config.images.names.dod = "Wolfi-Base";
-  expectConfigError(() => validateWolfiConfig(config), /lowercase OCI repository component/);
-
-  config.images.names.dod = "wolfi-base-dod";
-  config.images.prefix = "registry.example.com:70000/team";
+  config.image.reference = "devcontainers/Wolfi-Dev:1";
+  expectConfigError(() => validateWolfiConfig(config), /invalid OCI path component/);
+  config.image.reference = "registry.example.com:70000/team/image:1";
   expectConfigError(() => validateWolfiConfig(config), /invalid registry host or port/);
+  config.image.reference = "devcontainers/wolfi-dev";
+  expectConfigError(() => validateWolfiConfig(config), /explicit tag/);
 });
 
-test("accepts a namespaced registry prefix with a valid port", () => {
+test("accepts namespaced registry references with a valid port", () => {
   const config = clone(validConfig);
-  config.images.prefix = "localhost:5000/defense/team";
-  assert.equal(validateWolfiConfig(config).images.prefix, config.images.prefix);
+  config.image.reference = "localhost:5000/defense/team/image:2026.09";
+  assert.equal(validateWolfiConfig(config).image.reference, config.image.reference);
 });
 
 test("requires an explicitly tagged base image", () => {
@@ -195,6 +297,12 @@ test("treats optional tool keys as enable switches", () => {
   assert.equal(normalized.toolchain.mongosh, "2");
 });
 
+test("native build tools can be selected without Clang", () => {
+  const config = clone(validConfig);
+  config.toolchain.build = {};
+  assert.deepEqual(validateWolfiConfig(config).toolchain.build, {});
+});
+
 test("requires Maven and npm runtimes when those tools are enabled", () => {
   const withoutJava = clone(validConfig);
   delete withoutJava.toolchain.java;
@@ -212,10 +320,10 @@ test("accepts only supported frozen Rust components", () => {
 });
 
 test("rejects artifact paths that can escape the artifact root", () => {
-  for (const artifactPath of ["/tmp/wolfi", "artifacts/../secret", "artifacts\\wolfi"] ) {
+  for (const artifactPath of ["/tmp/wolfi", "artifacts/../secret", "artifacts\\wolfi", "artifacts", "tmp/cache"] ) {
     const config = clone(validConfig);
     config.artifacts.root = artifactPath;
-    expectConfigError(() => validateWolfiConfig(config), /relative POSIX path|path components/);
+    expectConfigError(() => validateWolfiConfig(config), /relative POSIX path|path components|dedicated directory/);
   }
 });
 
@@ -229,11 +337,13 @@ test("canonical JSON is independent of mapping insertion order", () => {
   assert.equal(canonicalJson({ z: 1, a: { y: 2, b: 3 } }), canonicalJson({ a: { b: 3, y: 2 }, z: 1 }));
 });
 
-test("derives all three tagged image references", () => {
-  const images = wolfiImageReferences(validConfig);
-  assert.equal(images.dod.reference, "devcontainers/wolfi-base-dod:0.1.0");
-  assert.equal(images.vscode.platform, "linux/amd64");
-  assert.equal(images.toolchain.repository, "devcontainers/wolfi-base-toolchain");
+test("has one configured image and derives its companion lock path", () => {
+  assert.deepEqual(wolfiImageReference(validConfig), {
+    reference: "devcontainers/wolfi-dev:0.1.0", platform: "linux/amd64"
+  });
+  assert.equal(companionLockPath("config/wolfi-ci.yaml"), "config/wolfi-ci.lock.json");
+  assert.equal(companionLockPath("profile.yml"), "profile.lock.json");
+  assert.equal(companionLockPath("profile"), "profile.lock.json");
 });
 
 test("selects the exact platform manifest and preserves the index digest", () => {
@@ -316,7 +426,7 @@ test("loads only versioned, non-empty resolution fragments", () => {
   }
 });
 
-test("creates and verifies a lock containing normalized config and real resolution fields", () => {
+test("base-resolution intermediates require explicit incomplete-lock verification", () => {
   const lock = createWolfiLock(validConfig, {
     generatedAt: "2026-09-04T00:00:00.000Z",
     baseImage: baseResolution(),
@@ -325,7 +435,63 @@ test("creates and verifies a lock containing normalized config and real resoluti
   assert.equal(lock.source.semanticSha256, wolfiConfigSemanticSha256(validConfig));
   assert.match(lock.source.fileSha256, /^[a-f0-9]{64}$/);
   assert.equal(lock.resolved.baseImage.digest, AMD64_DIGEST);
+  assert.equal(verifyWolfiLock(validConfig, lock, { requireArtifacts: false }), true);
+  expectConfigError(() => verifyWolfiLock(validConfig, lock), /must contain the artifact mapping/);
+});
+
+test("complete default locks retain all selected artifact records", () => {
+  for (const configName of ["wolfi-ci.yaml", "wolfi-dev.yaml"]) {
+    const configPath = path.join(path.dirname(DEFAULT_CONFIG_PATH), configName);
+    const config = loadWolfiConfig(configPath);
+    const lock = JSON.parse(fs.readFileSync(companionLockPath(configPath), "utf8"));
+    assert.equal(verifyWolfiLock(config, lock), true);
+  }
+});
+
+test("final APK package sets accept single-repository compatibility metadata", () => {
+  const lock = JSON.parse(fs.readFileSync(companionLockPath(DEFAULT_CONFIG_PATH), "utf8"));
+  const final = lock.resolved.apk.packageSets.final;
+  assert.deepEqual(final.repositorySubdirs, ["repositories/extra", "repositories/main"]);
+  final.repositorySubdirs = ["repositories/main"];
+  final.repositorySubdir = "repositories/main";
   assert.equal(verifyWolfiLock(validConfig, lock), true);
+});
+
+test("frozen locks reject absent, null, empty, and non-object selected vendor records", () => {
+  const complete = JSON.parse(fs.readFileSync(companionLockPath(DEFAULT_CONFIG_PATH), "utf8"));
+  for (const name of ["vscode", "extensions", "kubectl", "rust"]) {
+    for (const replacement of [undefined, null, {}, [], false]) {
+      const lock = clone(complete);
+      if (replacement === undefined) delete lock.resolved[name];
+      else lock.resolved[name] = replacement;
+      expectConfigError(() => verifyWolfiLock(validConfig, lock), new RegExp(`lock\\.resolved\\.${name}: must contain`));
+    }
+  }
+});
+
+test("frozen locks require one complete final APK package set", () => {
+  const complete = JSON.parse(fs.readFileSync(companionLockPath(DEFAULT_CONFIG_PATH), "utf8"));
+  for (const mutate of [
+    (lock) => { delete lock.resolved.apk; },
+    (lock) => { lock.resolved.apk = null; },
+    (lock) => { delete lock.resolved.apk.packageSets; },
+    (lock) => { delete lock.resolved.apk.packageSets.final; },
+    (lock) => { lock.resolved.apk.packageSets.legacy = {}; },
+    (lock) => { lock.resolved.apk.packageSets.final = null; },
+    (lock) => { lock.resolved.apk.packageSets.final.artifactDirectory = ""; }
+  ]) {
+    const lock = clone(complete);
+    mutate(lock);
+    expectConfigError(() => verifyWolfiLock(validConfig, lock), /lock\.resolved\.apk/);
+  }
+  for (const field of ["closure", "modules", "packages", "repositorySubdirs", "roots"]) {
+    for (const replacement of [undefined, null, [], {}]) {
+      const lock = clone(complete);
+      if (replacement === undefined) delete lock.resolved.apk.packageSets.final[field];
+      else lock.resolved.apk.packageSets.final[field] = replacement;
+      expectConfigError(() => verifyWolfiLock(validConfig, lock), /lock\.resolved\.apk\.packageSets\.final/);
+    }
+  }
 });
 
 test("lock verification detects YAML drift", () => {
@@ -336,6 +502,18 @@ test("lock verification detects YAML drift", () => {
   const changed = clone(validConfig);
   changed.user.uid = 2000;
   expectConfigError(() => verifyWolfiLock(changed, lock), /does not match the YAML/);
+});
+
+test("lock verification rejects a different output image and disabled vendor artifacts", () => {
+  const lock = createWolfiLock(validConfig, { baseImage: baseResolution() });
+  lock.image.reference = "devcontainers/wolfi-ci:0.1.0";
+  expectConfigError(() => verifyWolfiLock(validConfig, lock), /image coordinates/);
+
+  const config = clone(validConfig);
+  delete config.vscode;
+  const withoutEditor = createWolfiLock(config, { baseImage: baseResolution(config) });
+  withoutEditor.resolved.vscode = { commit: "stale" };
+  expectConfigError(() => verifyWolfiLock(config, withoutEditor), /artifact disabled/);
 });
 
 test("lock verification rejects malformed and mismatched base-image pins", () => {

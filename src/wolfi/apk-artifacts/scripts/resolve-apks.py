@@ -84,7 +84,7 @@ def require_config(args: argparse.Namespace) -> dict[str, Any]:
         raise SupplyError(
             f"normalized config SHA256 mismatch: expected {expected_hash}, got {actual_hash}"
         )
-    configured_platform = config.get("images", {}).get("platform")
+    configured_platform = config.get("image", {}).get("platform")
     if configured_platform != args.platform:
         raise SupplyError(
             f"config platform {configured_platform!r} does not match {args.platform!r}"

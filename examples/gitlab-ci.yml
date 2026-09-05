@@ -1,0 +1,43 @@
+# Include/adapt in the application repository. Configure these GitLab variables:
+# CI_TOOLCHAIN_IMAGE: registry/project/wolfi-ci@sha256:<reviewed digest>
+# KANIKO_IMAGE: approved shell-capable executor@sha256:<reviewed digest>
+# Both images must pass your CVE policy; the pipeline owns Kaniko's version.
+# Kubernetes runner: UID 0 allowed; privileged=false; no Docker socket mount.
+stages: [build, package]
+
+compile-test:
+  stage: build
+  image:
+    name: "$CI_TOOLCHAIN_IMAGE"
+    entrypoint: [""]
+  script:
+    # Replace with the application's offline/online dependency and build steps.
+    - ./ci/build-and-test.sh
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 day
+
+container-image:
+  stage: package
+  image:
+    name: "$KANIKO_IMAGE"
+    entrypoint: [""]
+  needs:
+    - job: compile-test
+      artifacts: true
+  script:
+    # KANIKO_IMAGE must include a shell and /kaniko/executor. CI variables supply
+    # registry credentials; never bake these into either reusable image.
+    - |
+      set -eu
+      umask 077
+      mkdir -p /kaniko/.docker
+      auth="$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$auth" > /kaniko/.docker/config.json
+      /kaniko/executor \
+        --context "$CI_PROJECT_DIR" \
+        --dockerfile "$CI_PROJECT_DIR/Dockerfile" \
+        --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" \
+        --digest-file "$CI_PROJECT_DIR/image-digest.txt"
+  artifacts:
+    paths: [image-digest.txt]
