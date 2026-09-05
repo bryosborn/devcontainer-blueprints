@@ -21,11 +21,13 @@ def image_footer(lock):
     user = config.get("user", {}).get("name", "root")
     home = "/root" if user == "root" else f"/home/{user}"
     env = {"HOME": home}
-    if "java" in config["toolchain"]:
+    if "java" in config["build"]:
         env["JAVA_HOME"] = "/opt/java"
-    if "rust" in config["toolchain"]:
+    if "rust" in config["build"]:
         env.update(RUSTUP_HOME="/usr/local/rustup", CARGO_HOME=f"{home}/.cargo")
         env["PATH"] = f"{home}/.cargo/bin:/usr/local/cargo/bin:$PATH"
+    if "playwright" in config:
+        env["PLAYWRIGHT_BROWSERS_PATH"] = "/opt/playwright/browsers"
     if config.get("docker", {}).get("socket", False):
         env.update(DOCKER_HOST="unix:///var/run/docker.sock", WOLFI_DOD_REMOTE_USER=user)
     lines = [f"ENV {key}={json.dumps(value)}" for key, value in env.items()]
@@ -58,7 +60,7 @@ def main():
         empty = workspace / "empty-vendor"
         empty.mkdir()
         vendor = ROOT / config["artifacts"]["root"] / platform.replace("/", "-") / "vendor"
-        if not any(k in lock["resolved"] for k in ("vscode", "kubectl", "rust")):
+        if not any(k in lock["resolved"] for k in ("vscode", "kubectl", "rust", "kaniko", "playwright")):
             vendor = empty
         build_args = {
             "BASE_IMAGE": lock["resolved"]["apk"]["baseImage"]["artifact"]["localReference"],

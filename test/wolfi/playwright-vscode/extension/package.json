@@ -1,0 +1,10 @@
+{
+  "name": "wolfi-playwright-acceptance",
+  "displayName": "Wolfi Playwright acceptance fixture",
+  "publisher": "devcontainer-blueprints-test",
+  "version": "0.0.1",
+  "engines": {"vscode": "^1.93.0"},
+  "extensionKind": ["workspace"],
+  "main": "extension.cjs",
+  "activationEvents": ["onStartupFinished"]
+}

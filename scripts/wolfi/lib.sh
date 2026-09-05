@@ -83,12 +83,21 @@ wolfi_verify_lock() {
     and (.image | type == "object")
     and .image == .config.image
     and .config.schemaVersion == 2
+    and (.config | has("toolchain") | not)
+    and (.config.build | type == "object")
+    and (.config.utilities | type == "object")
+    and vendor_record("kaniko"; (.config | has("kaniko")))
+    and vendor_record("playwright"; (.config | has("playwright")))
+    and (if .config | has("kaniko") then
+      .resolved.kaniko.version == .config.kaniko.version and .resolved.kaniko.platform == .image.platform else true end)
+    and (if .config | has("playwright") then
+      .resolved.playwright.version == .config.playwright.version and .resolved.playwright.platform == .image.platform else true end)
     and (.image.platform == "linux/amd64" or .image.platform == "linux/arm64")
     and (.resolved.baseImage.pinnedReference | type == "string")
     and vendor_record("vscode"; (.config | has("vscode")))
     and vendor_record("extensions"; ((.config.vscode.extensions // []) | length > 0))
-    and vendor_record("kubectl"; ((.config.toolchain // {}) | has("kubectl")))
-    and vendor_record("rust"; ((.config.toolchain // {}) | has("rust")))
+    and vendor_record("kubectl"; ((.config.utilities // {}) | has("kubectl")))
+    and vendor_record("rust"; ((.config.build // {}) | has("rust")))
     and (.resolved.apk | type == "object" and length > 0)
     and (.resolved.apk.packageSets | type == "object" and keys == ["final"])
     and (.resolved.apk.packageSets.final | type == "object" and length > 0)

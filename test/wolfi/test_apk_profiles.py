@@ -64,13 +64,13 @@ class ApkProfileTests(unittest.TestCase):
     def test_ci_has_tools_without_dev_runtime_roots(self):
         roots, modules = self.roots(self.profiles["ci"])
         names = {root["name"] for root in roots}
-        self.assertEqual(modules, ["base", "toolchain"])
+        self.assertEqual(modules, ["base", "build", "utilities"])
         self.assertTrue({"bash", "grep", "git", "jq", "gnutar", "gzip"} <= names)
         self.assertTrue({"docker-cli", "docker-cli-buildx", "docker-compose", "socat", "sudo", "shadow"}.isdisjoint(names))
 
     def test_profiles_share_toolchain_package_roots(self):
         roots = {
-            name: [root for root in self.roots(config)[0] if root["module"] == "toolchain"]
+            name: [root for root in self.roots(config)[0] if root["module"] in {"build", "utilities"}]
             for name, config in self.profiles.items()
         }
         self.assertEqual(roots["ci"], roots["dev"])
@@ -93,21 +93,22 @@ class ApkProfileTests(unittest.TestCase):
 
     def test_minimal_profile_has_only_base_roots(self):
         config = copy.deepcopy(self.profiles["ci"])
-        config["toolchain"] = {}
+        config["build"] = {}
+        config["utilities"] = {}
         roots, modules = self.roots(config)
         self.assertEqual(modules, ["base"])
         self.assertTrue(all(root["module"] == "base" for root in roots))
 
     def test_build_basics_do_not_require_clang(self):
         config = copy.deepcopy(self.profiles["ci"])
-        config["toolchain"] = {"build": {}}
+        config["build"] = {"native": {}}
         names = {root["name"] for root in self.roots(config)[0]}
         self.assertTrue({"build-base", "cmake", "openssl-dev"} <= names)
         self.assertNotIn("clang-22", names)
 
     def test_rust_only_has_native_linker_without_clang_or_cmake(self):
         config = copy.deepcopy(self.profiles["ci"])
-        config["toolchain"] = {"rust": config["toolchain"]["rust"]}
+        config["build"] = {"rust": config["build"]["rust"]}
         names = {root["name"] for root in self.roots(config)[0]}
         self.assertIn("build-base", names)
         self.assertTrue({"clang-22", "cmake", "openssl-dev"}.isdisjoint(names))
@@ -132,10 +133,25 @@ class ApkProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(SupplyError, "roots differ"):
             validate_selected_package_set(config, selected)
 
+    def test_reviewed_utilities_are_optional_signed_native_roots(self):
+        config = {"build": {}, "utilities": {"curl": "latest", "openssh-client": "latest"}}
+        names = {root["name"] for root in self.roots(config)[0]}
+        self.assertTrue({"curl", "openssh-client"} <= names)
+        self.assertTrue({"openssh", "openssh-server", "zip", "bind-tools"}.isdisjoint(names))
+
+    def test_duplicate_roots_preserve_a_pin_and_reject_conflicting_pins(self):
+        def root(module, selector):
+            return {"module": module, "name": "curl", "repository": "main", "selector": selector, "validateSelector": True}
+        for roots in [[root("a", "8.22"), root("b", "latest")], [root("a", "latest"), root("b", "8.22")]]:
+            self.assertEqual(roots_for_modules(roots, ["a", "b"])[0]["selector"], "8.22")
+        with self.assertRaisesRegex(SupplyError, "conflicting selectors"):
+            roots_for_modules([root("a", "8.22"), root("b", "8.21")], ["a", "b"])
+
     def test_one_closure_records_exact_selected_root_constraints(self):
         resolver = load_module("resolve-apks.py")
         config = copy.deepcopy(self.profiles["ci"])
-        config["toolchain"] = {}
+        config["build"] = {}
+        config["utilities"] = {}
         roots, modules = self.roots(config)
         packages = [{
             "id": f"main:{root['name']}=1.0-r0", "name": root["name"],

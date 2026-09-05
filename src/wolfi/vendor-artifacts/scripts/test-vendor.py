@@ -71,7 +71,7 @@ class VendorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = root / "config.json"
-            config.write_text(json.dumps({"image": {"platform": "linux/amd64"}, "toolchain": {}}))
+            config.write_text(json.dumps({"image": {"platform": "linux/amd64"}, "build": {}, "utilities": {}}))
             fragment = root / "fragment.json"
             args = type("Args", (), dict(repo_root=root, artifact_root=root / "vendor", config_json=config,
                                           config_hash="a" * 64, fragment=fragment, base_image=None))()
@@ -106,11 +106,11 @@ class VendorTests(unittest.TestCase):
                         if content is not None:
                             (root / "payload").write_bytes(content)
                         with patch.object(frozen, "parse_args", return_value=args), \
-                                patch.object(frozen.urllib.request, "urlopen", side_effect=AssertionError("network used")), \
+                                patch.object(frozen.urllib.request, "build_opener", side_effect=AssertionError("network used")), \
                                 self.assertRaisesRegex(SystemExit, message):
                             frozen.main()
             (root / "payload").write_bytes(payload)
-            with patch.object(frozen.urllib.request, "urlopen", side_effect=AssertionError("network used")):
+            with patch.object(frozen.urllib.request, "build_opener", side_effect=AssertionError("network used")):
                 frozen.fetch("https://example.invalid/payload", root / "payload", digest, offline=True)
 
     def test_offline_prefetch_can_restore_exact_embedded_extension_metadata(self):
@@ -127,7 +127,7 @@ class VendorTests(unittest.TestCase):
             }}}))
             args = type("Args", (), dict(repo_root=root, lock=lock, offline=True))()
             with patch.object(frozen, "parse_args", return_value=args), \
-                    patch.object(frozen.urllib.request, "urlopen", side_effect=AssertionError("network used")):
+                    patch.object(frozen.urllib.request, "build_opener", side_effect=AssertionError("network used")):
                 frozen.main()
             self.assertEqual((root / "extensions.lock.json").read_bytes(), source.encode())
 
@@ -139,7 +139,7 @@ class VendorTests(unittest.TestCase):
             unrelated = artifacts / "unrelated-source"
             unrelated.mkdir()
             (unrelated / "keep").write_text("preserve")
-            config = {"image": {"platform": "linux/amd64"}, "toolchain": {"rust": {
+            config = {"image": {"platform": "linux/amd64"}, "build": {"rust": {
                 "toolchain": "nightly-2026-04-11", "components": ["rust-src"],
             }}}
             init_payload = b"rustup-init fixture"
@@ -153,7 +153,7 @@ class VendorTests(unittest.TestCase):
                     (destination / name).mkdir(parents=True)
                     (destination / name / "fixture").write_text(name)
                 (destination / "metadata.json").write_text(json.dumps({
-                    **config["toolchain"]["rust"], "targetTriple": "x86_64-unknown-linux-gnu",
+                    **config["build"]["rust"], "targetTriple": "x86_64-unknown-linux-gnu",
                 }))
                 return destination
             with patch.object(resolver, "fetch_bytes", return_value=init_hash.encode()), \
@@ -169,7 +169,7 @@ class VendorTests(unittest.TestCase):
             lock.write_text(json.dumps({"resolved": {"rust": resolved}}))
             args = type("Args", (), dict(repo_root=root, lock=lock, offline=True))()
             with patch.object(frozen, "parse_args", return_value=args), \
-                    patch.object(frozen.urllib.request, "urlopen", side_effect=AssertionError("network used")):
+                    patch.object(frozen.urllib.request, "build_opener", side_effect=AssertionError("network used")):
                 frozen.main()
 
     def test_vscode_without_extensions_only_downloads_server(self):

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-05T10:00:52.501Z",
+  "generatedAt": "2026-09-05T12:07:27.982Z",
   "source": {
     "path": "config/wolfi-ci.yaml",
-    "fileSha256": "053aac6f95d2962908c9bcbab07bf59f8b4f5c232c956d21f8bb6294b2fca8e7",
-    "semanticSha256": "2312eaab77e3a985f989affb09a48ed894f7f283f71e598b4be90e1595611b8a"
+    "fileSha256": "635248ddef881fea932ea14717559cb58908b8b8a2e61d5744d2e2df95ec0b0f",
+    "semanticSha256": "58bfd99c0de6f691133aca2d5ec03f1efff5e569944a15eef730b265d18d2991"
   },
   "resolver": {
     "name": "devcontainer-blueprints-wolfi-lock",
@@ -25,12 +25,12 @@
       {
         "name": "wolfi-apk-artifacts",
         "version": "1",
-        "sourceSha256": "852516cf2c11a6383e024166c562f72785fb012a15c4e3c576dc53b4f276f781"
+        "sourceSha256": "dc6926dac0ac2b8a84445fec69dacebdc647d4da3d539f75176a6e363d2b75e0"
       },
       {
         "name": "wolfi-vendor-artifacts",
         "version": "1",
-        "sourceSha256": "1b4c9063503600c79ab3a87e4530d92cee805e0a2976ebdd43ab6738942bc84e"
+        "sourceSha256": "ffcca8e0425e915ae08c8f381cb88b3f3da9db4df7cae96baf85c3d2e4bafee3"
       }
     ]
   },
@@ -51,8 +51,8 @@
       }
     },
     "devcontainer": false,
-    "toolchain": {
-      "build": {
+    "build": {
+      "native": {
         "clang": "latest"
       },
       "python": [
@@ -63,12 +63,6 @@
       "maven": "3.9",
       "node": "24",
       "npm": "12",
-      "kubectl": "1.37.0",
-      "yq": "4",
-      "helm": "4",
-      "oras": "1",
-      "mongosh": "2",
-      "mongodbDatabaseTools": "100",
       "rust": {
         "toolchain": "nightly-2026-09-04",
         "components": [
@@ -78,6 +72,26 @@
           "clippy"
         ]
       }
+    },
+    "utilities": {
+      "curl": "latest",
+      "openssh-client": "latest",
+      "openssh-keygen": "latest",
+      "openssh-keyscan": "latest",
+      "unzip": "latest",
+      "zip": "latest",
+      "less": "latest",
+      "procps": "latest",
+      "findutils": "latest",
+      "kubectl": "1.37.0",
+      "yq": "4",
+      "helm": "4",
+      "oras": "1",
+      "mongosh": "2",
+      "mongodbDatabaseTools": "100"
+    },
+    "kaniko": {
+      "version": "1.28.4"
     }
   },
   "image": {
@@ -106,7 +120,7 @@
           "pinnedReference": "cgr.dev/chainguard/wolfi-base@sha256:9fb170f1ba62a9129476e82d286d3c78164411fc2e9951df18b83587eb096c95",
           "platform": "linux/amd64",
           "schemaVersion": 1,
-          "sha256": "e3112156ecc4f13798a992aa47a63374c024f2e5d785a039cd7d40a09e294592",
+          "sha256": "0815c137a53d4e5370e82b35d965e777f0ec19093f1dcceea700dc277b23956f",
           "size": 7318528
         },
         "digest": "sha256:9fb170f1ba62a9129476e82d286d3c78164411fc2e9951df18b83587eb096c95",
@@ -153,7 +167,9 @@
             "main:cmake=4.4.3-r1",
             "main:corepack=0.36.0-r0",
             "main:coreutils=9.11-r4",
+            "main:curl=8.22.0-r0",
             "main:cyrus-sasl-heimdal-libs=2.1.28-r55",
+            "main:findutils=4.11.0-r2",
             "main:freetype=2.14.3-r6",
             "main:gcc=16.2.0-r1",
             "main:gdbm=1.26-r6",
@@ -181,6 +197,7 @@
             "main:krb5-libs=1.22.2-r3",
             "main:lcms2=2.19.1-r2",
             "main:ld-linux-2.44=2.44-r5",
+            "main:less=709-r1",
             "main:libLLVM-22=22.1.8-r3",
             "main:libacl1=2.4.0-r3",
             "main:libarchive=3.8.9-r1",
@@ -195,6 +212,7 @@
             "main:libcrypt1-2.44=2.44-r5",
             "main:libcrypto3=3.6.4-r4",
             "main:libcurl-openssl4=8.22.0-r0",
+            "main:libedit=3.1-r19",
             "main:libexpat1=2.8.4-r0",
             "main:libffi=3.8.0-r1",
             "main:libgcc=16.2.0-r1",
@@ -207,6 +225,7 @@
             "main:libnghttp2-14=1.70.0-r3",
             "main:libpcre2-8-0=10.48-r0",
             "main:libpng=1.6.58-r3",
+            "main:libproc-2-0=4.0.7-r1",
             "main:libpsl=0.23.3-r1",
             "main:libquadmath=16.2.0-r1",
             "main:librhash0=1.4.6-r6",
@@ -251,6 +270,9 @@
             "main:openjdk-26-default-jdk=26.0.2.1-r2",
             "main:openjdk-26=26.0.2.1-r2",
             "main:openssf-compiler-options=20250904-r9",
+            "main:openssh-client=10.5_p1-r1",
+            "main:openssh-keygen=10.5_p1-r1",
+            "main:openssh-keyscan=10.5_p1-r1",
             "main:openssl-dev=3.6.4-r4",
             "main:openssl=3.6.4-r4",
             "main:oras=1.3.4-r0",
@@ -260,6 +282,7 @@
             "main:posix-cc-wrappers=2-r10",
             "main:posix-libc-utils-2.44=2.44-r5",
             "main:posix-libc-utils-bin-2.44=2.44-r5",
+            "main:procps=4.0.7-r1",
             "main:py3-pip-wheel=26.2.1-r1",
             "main:py3.12-pip-base=26.2.1-r1",
             "main:py3.12-setuptools=84.0.0-r0",
@@ -270,16 +293,19 @@
             "main:readline=8.3-r3",
             "main:sqlite-libs=3.53.4-r2",
             "main:ttf-dejavu=2.37-r8",
+            "main:unzip=6.0-r8",
             "main:wolfi-base=1-r7",
             "main:wolfi-baselayout=20230201-r29",
             "main:wolfi-keys=1-r13",
             "main:xz=5.8.3-r3",
             "main:yq=4.53.6-r2",
+            "main:zip=3.0-r11",
             "main:zlib=1.3.2-r5"
           ],
           "modules": [
             "base",
-            "toolchain"
+            "build",
+            "utilities"
           ],
           "packages": [
             "bash=5.3-r13",
@@ -289,27 +315,36 @@
             "cmake=4.4.3-r1",
             "corepack=0.36.0-r0",
             "coreutils=9.11-r4",
+            "curl=8.22.0-r0",
+            "findutils=4.11.0-r2",
             "git=2.55.0-r5",
             "gnutar=1.35-r12",
             "grep=3.12-r8",
             "gzip=1.14-r9",
             "helm-4=4.2.4-r3",
             "jq=1.8.2-r2",
+            "less=709-r1",
             "maven-3.9=3.9.16-r2",
             "mongo-tools=100.18.0-r6",
             "mongosh=2.10.0-r1",
             "nodejs-24=24.20.0-r1",
             "npm-12=12.0.2-r2",
             "openjdk-26-default-jdk=26.0.2.1-r2",
+            "openssh-client=10.5_p1-r1",
+            "openssh-keygen=10.5_p1-r1",
+            "openssh-keyscan=10.5_p1-r1",
             "openssl=3.6.4-r4",
             "openssl-dev=3.6.4-r4",
             "oras=1.3.4-r0",
             "posix-libc-utils-2.44=2.44-r5",
+            "procps=4.0.7-r1",
             "py3.12-pip-base=26.2.1-r1",
             "py3.13-pip-base=26.2.1-r1",
             "python-3.12-base=3.12.14-r6",
             "python-3.13-base=3.13.15-r6",
-            "yq=4.53.6-r2"
+            "unzip=6.0-r8",
+            "yq=4.53.6-r2",
+            "zip=3.0-r11"
           ],
           "repositorySubdirs": [
             "repositories/extra",
@@ -327,7 +362,7 @@
             },
             {
               "constraint": "build-base=1-r9",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "build-base",
               "repository": "main",
               "requestedName": "build-base",
@@ -345,7 +380,7 @@
             },
             {
               "constraint": "clang-22=22.1.8-r3",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "clang-22",
               "repository": "main",
               "requestedName": "clang-22",
@@ -354,7 +389,7 @@
             },
             {
               "constraint": "cmake=4.4.3-r1",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "cmake",
               "repository": "main",
               "requestedName": "cmake",
@@ -363,7 +398,7 @@
             },
             {
               "constraint": "corepack=0.36.0-r0",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "corepack",
               "repository": "main",
               "requestedName": "corepack",
@@ -378,6 +413,24 @@
               "requestedName": "coreutils",
               "requestedSelector": "latest",
               "version": "9.11-r4"
+            },
+            {
+              "constraint": "curl=8.22.0-r0",
+              "module": "utilities",
+              "providerName": "curl",
+              "repository": "main",
+              "requestedName": "curl",
+              "requestedSelector": "latest",
+              "version": "8.22.0-r0"
+            },
+            {
+              "constraint": "findutils=4.11.0-r2",
+              "module": "utilities",
+              "providerName": "findutils",
+              "repository": "main",
+              "requestedName": "findutils",
+              "requestedSelector": "latest",
+              "version": "4.11.0-r2"
             },
             {
               "constraint": "git=2.55.0-r5",
@@ -417,7 +470,7 @@
             },
             {
               "constraint": "helm-4=4.2.4-r3",
-              "module": "toolchain",
+              "module": "utilities",
               "providerName": "helm-4",
               "repository": "main",
               "requestedName": "helm-4",
@@ -434,8 +487,17 @@
               "version": "1.8.2-r2"
             },
             {
+              "constraint": "less=709-r1",
+              "module": "utilities",
+              "providerName": "less",
+              "repository": "main",
+              "requestedName": "less",
+              "requestedSelector": "latest",
+              "version": "709-r1"
+            },
+            {
               "constraint": "maven-3.9=3.9.16-r2",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "maven-3.9",
               "repository": "main",
               "requestedName": "maven-3.9",
@@ -444,7 +506,7 @@
             },
             {
               "constraint": "mongo-tools=100.18.0-r6",
-              "module": "toolchain",
+              "module": "utilities",
               "providerName": "mongo-tools",
               "repository": "main",
               "requestedName": "mongo-tools",
@@ -453,7 +515,7 @@
             },
             {
               "constraint": "mongosh=2.10.0-r1",
-              "module": "toolchain",
+              "module": "utilities",
               "providerName": "mongosh",
               "repository": "extra",
               "requestedName": "mongosh",
@@ -462,7 +524,7 @@
             },
             {
               "constraint": "nodejs-24=24.20.0-r1",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "nodejs-24",
               "repository": "main",
               "requestedName": "nodejs-24",
@@ -471,7 +533,7 @@
             },
             {
               "constraint": "npm-12=12.0.2-r2",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "npm-12",
               "repository": "main",
               "requestedName": "npm-12",
@@ -480,7 +542,7 @@
             },
             {
               "constraint": "openjdk-26-default-jdk=26.0.2.1-r2",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "openjdk-26-default-jdk",
               "repository": "main",
               "requestedName": "openjdk-26-default-jdk",
@@ -488,8 +550,35 @@
               "version": "26.0.2.1-r2"
             },
             {
+              "constraint": "openssh-client=10.5_p1-r1",
+              "module": "utilities",
+              "providerName": "openssh-client",
+              "repository": "main",
+              "requestedName": "openssh-client",
+              "requestedSelector": "latest",
+              "version": "10.5_p1-r1"
+            },
+            {
+              "constraint": "openssh-keygen=10.5_p1-r1",
+              "module": "utilities",
+              "providerName": "openssh-keygen",
+              "repository": "main",
+              "requestedName": "openssh-keygen",
+              "requestedSelector": "latest",
+              "version": "10.5_p1-r1"
+            },
+            {
+              "constraint": "openssh-keyscan=10.5_p1-r1",
+              "module": "utilities",
+              "providerName": "openssh-keyscan",
+              "repository": "main",
+              "requestedName": "openssh-keyscan",
+              "requestedSelector": "latest",
+              "version": "10.5_p1-r1"
+            },
+            {
               "constraint": "openssl=3.6.4-r4",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "openssl",
               "repository": "main",
               "requestedName": "openssl",
@@ -498,7 +587,7 @@
             },
             {
               "constraint": "openssl-dev=3.6.4-r4",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "openssl-dev",
               "repository": "main",
               "requestedName": "openssl-dev",
@@ -507,7 +596,7 @@
             },
             {
               "constraint": "oras=1.3.4-r0",
-              "module": "toolchain",
+              "module": "utilities",
               "providerName": "oras",
               "repository": "main",
               "requestedName": "oras",
@@ -524,8 +613,17 @@
               "version": "2.44-r5"
             },
             {
+              "constraint": "procps=4.0.7-r1",
+              "module": "utilities",
+              "providerName": "procps",
+              "repository": "main",
+              "requestedName": "procps",
+              "requestedSelector": "latest",
+              "version": "4.0.7-r1"
+            },
+            {
               "constraint": "py3.12-pip-base=26.2.1-r1",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "py3.12-pip-base",
               "repository": "main",
               "requestedName": "py3.12-pip-base",
@@ -534,7 +632,7 @@
             },
             {
               "constraint": "py3.13-pip-base=26.2.1-r1",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "py3.13-pip-base",
               "repository": "main",
               "requestedName": "py3.13-pip-base",
@@ -543,7 +641,7 @@
             },
             {
               "constraint": "python-3.12-base=3.12.14-r6",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "python-3.12-base",
               "repository": "main",
               "requestedName": "python-3.12-base",
@@ -552,7 +650,7 @@
             },
             {
               "constraint": "python-3.13-base=3.13.15-r6",
-              "module": "toolchain",
+              "module": "build",
               "providerName": "python-3.13-base",
               "repository": "main",
               "requestedName": "python-3.13-base",
@@ -560,13 +658,31 @@
               "version": "3.13.15-r6"
             },
             {
+              "constraint": "unzip=6.0-r8",
+              "module": "utilities",
+              "providerName": "unzip",
+              "repository": "main",
+              "requestedName": "unzip",
+              "requestedSelector": "latest",
+              "version": "6.0-r8"
+            },
+            {
               "constraint": "yq=4.53.6-r2",
-              "module": "toolchain",
+              "module": "utilities",
               "providerName": "yq",
               "repository": "main",
               "requestedName": "yq",
               "requestedSelector": "4",
               "version": "4.53.6-r2"
+            },
+            {
+              "constraint": "zip=3.0-r11",
+              "module": "utilities",
+              "providerName": "zip",
+              "repository": "main",
+              "requestedName": "zip",
+              "requestedSelector": "latest",
+              "version": "3.0-r11"
             }
           ]
         }
@@ -835,6 +951,24 @@
         },
         {
           "architecture": "x86_64",
+          "constraint": "curl=8.22.0-r0",
+          "file": "repositories/main/x86_64/curl-8.22.0-r0.apk",
+          "id": "main:curl=8.22.0-r0",
+          "license": "MIT",
+          "name": "curl",
+          "origin": "curl",
+          "provides": [
+            "cmd:curl=8.22.0-r0",
+            "cmd:wcurl=8.22.0-r0"
+          ],
+          "repository": "main",
+          "sha256": "3cf9f33a7cdb2ea0822541ea57daa6da34dc70b86312d8f6c4eef209532bd7dd",
+          "size": 237289,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/curl-8.22.0-r0.apk",
+          "version": "8.22.0-r0"
+        },
+        {
+          "architecture": "x86_64",
           "constraint": "cyrus-sasl-heimdal-libs=2.1.28-r55",
           "file": "repositories/main/x86_64/cyrus-sasl-heimdal-libs-2.1.28-r55.apk",
           "id": "main:cyrus-sasl-heimdal-libs=2.1.28-r55",
@@ -851,6 +985,24 @@
           "size": 217334,
           "url": "https://apk.cgr.dev/chainguard/x86_64/cyrus-sasl-heimdal-libs-2.1.28-r55.apk",
           "version": "2.1.28-r55"
+        },
+        {
+          "architecture": "x86_64",
+          "constraint": "findutils=4.11.0-r2",
+          "file": "repositories/main/x86_64/findutils-4.11.0-r2.apk",
+          "id": "main:findutils=4.11.0-r2",
+          "license": "GPL-3.0-or-later",
+          "name": "findutils",
+          "origin": "findutils",
+          "provides": [
+            "cmd:find=4.11.0-r2",
+            "cmd:xargs=4.11.0-r2"
+          ],
+          "repository": "main",
+          "sha256": "4d2afb15bb8612291076909d93331682f2b81b365b6a6a9fa6a908b06e390458",
+          "size": 177825,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/findutils-4.11.0-r2.apk",
+          "version": "4.11.0-r2"
         },
         {
           "architecture": "x86_64",
@@ -1455,6 +1607,23 @@
         },
         {
           "architecture": "x86_64",
+          "constraint": "less=709-r1",
+          "file": "repositories/main/x86_64/less-709-r1.apk",
+          "id": "main:less=709-r1",
+          "license": "GPL-3.0-or-later OR BSD-2-Clause",
+          "name": "less",
+          "origin": "less",
+          "provides": [
+            "cmd:less=709-r1"
+          ],
+          "repository": "main",
+          "sha256": "17cbd9caca13f20ee50013a096c82d808d5f438ca98dd4140dc526f7d39302cf",
+          "size": 175618,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/less-709-r1.apk",
+          "version": "709-r1"
+        },
+        {
+          "architecture": "x86_64",
           "constraint": "libLLVM-22=22.1.8-r3",
           "file": "repositories/main/x86_64/libLLVM-22-22.1.8-r3.apk",
           "id": "main:libLLVM-22=22.1.8-r3",
@@ -1710,6 +1879,24 @@
         },
         {
           "architecture": "x86_64",
+          "constraint": "libedit=3.1-r19",
+          "file": "repositories/main/x86_64/libedit-3.1-r19.apk",
+          "id": "main:libedit=3.1-r19",
+          "license": "BSD-3-Clause",
+          "name": "libedit",
+          "origin": "libedit",
+          "provides": [
+            "so-ver:libedit.so.0=3.1-r19",
+            "so:libedit.so.0=0"
+          ],
+          "repository": "main",
+          "sha256": "27f0731802257db712485e60b8a12df669e17793cf7869627b41f60e01d1b1fb",
+          "size": 116374,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/libedit-3.1-r19.apk",
+          "version": "3.1-r19"
+        },
+        {
+          "architecture": "x86_64",
           "constraint": "libexpat1=2.8.4-r0",
           "file": "repositories/main/x86_64/libexpat1-2.8.4-r0.apk",
           "id": "main:libexpat1=2.8.4-r0",
@@ -1935,6 +2122,24 @@
           "size": 142656,
           "url": "https://apk.cgr.dev/chainguard/x86_64/libpng-1.6.58-r3.apk",
           "version": "1.6.58-r3"
+        },
+        {
+          "architecture": "x86_64",
+          "constraint": "libproc-2-0=4.0.7-r1",
+          "file": "repositories/main/x86_64/libproc-2-0-4.0.7-r1.apk",
+          "id": "main:libproc-2-0=4.0.7-r1",
+          "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+          "name": "libproc-2-0",
+          "origin": "procps",
+          "provides": [
+            "so-ver:libproc2.so.1=4.0.7-r1",
+            "so:libproc2.so.1=1"
+          ],
+          "repository": "main",
+          "sha256": "3482fbc6ce6df37cd5ead386f12033e8ed538971d9727668c923a26c1568b715",
+          "size": 95173,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/libproc-2-0-4.0.7-r1.apk",
+          "version": "4.0.7-r1"
         },
         {
           "architecture": "x86_64",
@@ -2830,6 +3035,61 @@
         },
         {
           "architecture": "x86_64",
+          "constraint": "openssh-client=10.5_p1-r1",
+          "file": "repositories/main/x86_64/openssh-client-10.5_p1-r1.apk",
+          "id": "main:openssh-client=10.5_p1-r1",
+          "license": "ISC",
+          "name": "openssh-client",
+          "origin": "openssh",
+          "provides": [
+            "cmd:scp=10.5_p1-r1",
+            "cmd:sftp=10.5_p1-r1",
+            "cmd:ssh-add=10.5_p1-r1",
+            "cmd:ssh-agent=10.5_p1-r1",
+            "cmd:ssh=10.5_p1-r1"
+          ],
+          "repository": "main",
+          "sha256": "db14664efb3ffa12a3f66693c8d362f94086d2078c0024ed2d66ccf806e081d2",
+          "size": 1239982,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/openssh-client-10.5_p1-r1.apk",
+          "version": "10.5_p1-r1"
+        },
+        {
+          "architecture": "x86_64",
+          "constraint": "openssh-keygen=10.5_p1-r1",
+          "file": "repositories/main/x86_64/openssh-keygen-10.5_p1-r1.apk",
+          "id": "main:openssh-keygen=10.5_p1-r1",
+          "license": "ISC",
+          "name": "openssh-keygen",
+          "origin": "openssh",
+          "provides": [
+            "cmd:ssh-keygen=10.5_p1-r1"
+          ],
+          "repository": "main",
+          "sha256": "684d04545414744dc98df62cacbe105cbb9fc95a6af75fba863659bda3c4d905",
+          "size": 305423,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/openssh-keygen-10.5_p1-r1.apk",
+          "version": "10.5_p1-r1"
+        },
+        {
+          "architecture": "x86_64",
+          "constraint": "openssh-keyscan=10.5_p1-r1",
+          "file": "repositories/main/x86_64/openssh-keyscan-10.5_p1-r1.apk",
+          "id": "main:openssh-keyscan=10.5_p1-r1",
+          "license": "ISC",
+          "name": "openssh-keyscan",
+          "origin": "openssh",
+          "provides": [
+            "cmd:ssh-keyscan=10.5_p1-r1"
+          ],
+          "repository": "main",
+          "sha256": "a2f4901dc6a7fc96c9a48fdbf0ed8fee38188ef4b3af41e3a9816591336fb434",
+          "size": 302214,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/openssh-keyscan-10.5_p1-r1.apk",
+          "version": "10.5_p1-r1"
+        },
+        {
+          "architecture": "x86_64",
           "constraint": "openssl-dev=3.6.4-r4",
           "file": "repositories/main/x86_64/openssl-dev-3.6.4-r4.apk",
           "id": "main:openssl-dev=3.6.4-r4",
@@ -2996,6 +3256,40 @@
           "size": 108779,
           "url": "https://apk.cgr.dev/chainguard/x86_64/posix-libc-utils-bin-2.44-2.44-r5.apk",
           "version": "2.44-r5"
+        },
+        {
+          "architecture": "x86_64",
+          "constraint": "procps=4.0.7-r1",
+          "file": "repositories/main/x86_64/procps-4.0.7-r1.apk",
+          "id": "main:procps=4.0.7-r1",
+          "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+          "name": "procps",
+          "origin": "procps",
+          "provides": [
+            "cmd:free=4.0.7-r1",
+            "cmd:hugetop=4.0.7-r1",
+            "cmd:kill=4.0.7-r1",
+            "cmd:pgrep=4.0.7-r1",
+            "cmd:pidof=4.0.7-r1",
+            "cmd:pidwait=4.0.7-r1",
+            "cmd:pkill=4.0.7-r1",
+            "cmd:pmap=4.0.7-r1",
+            "cmd:ps=4.0.7-r1",
+            "cmd:pwdx=4.0.7-r1",
+            "cmd:slabtop=4.0.7-r1",
+            "cmd:sysctl=4.0.7-r1",
+            "cmd:tload=4.0.7-r1",
+            "cmd:top=4.0.7-r1",
+            "cmd:uptime=4.0.7-r1",
+            "cmd:vmstat=4.0.7-r1",
+            "cmd:w=4.0.7-r1",
+            "cmd:watch=4.0.7-r1"
+          ],
+          "repository": "main",
+          "sha256": "808656f0ec019afcafbf7c27a2e007a50d4c78117d93f31d19e44e2372ce9ac8",
+          "size": 359615,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/procps-4.0.7-r1.apk",
+          "version": "4.0.7-r1"
         },
         {
           "architecture": "x86_64",
@@ -3175,6 +3469,27 @@
         },
         {
           "architecture": "x86_64",
+          "constraint": "unzip=6.0-r8",
+          "file": "repositories/main/x86_64/unzip-6.0-r8.apk",
+          "id": "main:unzip=6.0-r8",
+          "license": "Info-ZIP",
+          "name": "unzip",
+          "origin": "unzip",
+          "provides": [
+            "cmd:funzip=6.0-r8",
+            "cmd:unzip=6.0-r8",
+            "cmd:unzipsfx=6.0-r8",
+            "cmd:zipgrep=6.0-r8",
+            "cmd:zipinfo=6.0-r8"
+          ],
+          "repository": "main",
+          "sha256": "3918ab6b639c91cb0a6db769376038526b4c70b18695c3c04d4199b4a28f7ed3",
+          "size": 208191,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/unzip-6.0-r8.apk",
+          "version": "6.0-r8"
+        },
+        {
+          "architecture": "x86_64",
           "constraint": "wolfi-base=1-r7",
           "file": "repositories/main/x86_64/wolfi-base-1-r7.apk",
           "id": "main:wolfi-base=1-r7",
@@ -3269,6 +3584,26 @@
         },
         {
           "architecture": "x86_64",
+          "constraint": "zip=3.0-r11",
+          "file": "repositories/main/x86_64/zip-3.0-r11.apk",
+          "id": "main:zip=3.0-r11",
+          "license": "Info-ZIP",
+          "name": "zip",
+          "origin": "zip",
+          "provides": [
+            "cmd:zip=3.0-r11",
+            "cmd:zipcloak=3.0-r11",
+            "cmd:zipnote=3.0-r11",
+            "cmd:zipsplit=3.0-r11"
+          ],
+          "repository": "main",
+          "sha256": "ff2b006a214aef33cf32e956230873c34b472d2208df9026764f9415178c5064",
+          "size": 310499,
+          "url": "https://apk.cgr.dev/chainguard/x86_64/zip-3.0-r11.apk",
+          "version": "3.0-r11"
+        },
+        {
+          "architecture": "x86_64",
           "constraint": "zlib=1.3.2-r5",
           "file": "repositories/main/x86_64/zlib-1.3.2-r5.apk",
           "id": "main:zlib=1.3.2-r5",
@@ -3292,8 +3627,8 @@
           "architecture": "x86_64",
           "cacheFileName": "APKINDEX.6e363e99.tar.gz",
           "indexFile": "repositories/extra/x86_64/APKINDEX.tar.gz",
-          "indexSha256": "34641b3d40bbe7a7b981d7041e291f17d0f5e536b4cade626c15be13b207ce63",
-          "indexSize": 955920,
+          "indexSha256": "147296809a80f2bef65ddca4bf89f41679a4dd0a289d78e31431cc13db61fd6b",
+          "indexSize": 956171,
           "indexUrl": "https://apk.cgr.dev/extra-packages/x86_64/APKINDEX.tar.gz",
           "signatureKeyFingerprintsSha256": [
             "d91e3de0257c8762512695edbe35c7fb910ea5e11ff1cd54051e1ee50c10a0ec"
@@ -3312,8 +3647,8 @@
           "architecture": "x86_64",
           "cacheFileName": "APKINDEX.7bec2991.tar.gz",
           "indexFile": "repositories/main/x86_64/APKINDEX.tar.gz",
-          "indexSha256": "848df603f414f98f689dadf1373cd5b597b7b2a444bea5d11c3f9489b82cba95",
-          "indexSize": 15905611,
+          "indexSha256": "c2444b392d3ad7f1ad375c2632f1351ad4040e5cdb38fbdf187073a37308b208",
+          "indexSize": 15906931,
           "indexUrl": "https://apk.cgr.dev/chainguard/x86_64/APKINDEX.tar.gz",
           "signatureKeyFingerprintsSha256": [
             "d91e3de0257c8762512695edbe35c7fb910ea5e11ff1cd54051e1ee50c10a0ec",
@@ -3334,6 +3669,150 @@
         }
       },
       "schemaVersion": 1
+    },
+    "kaniko": {
+      "archive": {
+        "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/kaniko.tar.gz",
+        "sha256": "002b2ed146307676c9682f0a0e37e82e778f1d0a5a1350466f103c592df13b7c",
+        "size": 17082180
+      },
+      "configDigest": "sha256:6b613e8444ed67b239e3d03b64858ad1d6eb48e24d89c2db4fed1d9582ffb416",
+      "image": "ghcr.io/osscontainertools/kaniko:v1.28.4",
+      "indexDigest": "sha256:447ae463e61067e5c562f266861a156e000014fc2d03fe7d543f9e4c5b2c96e7",
+      "manifestDigest": "sha256:a2194402f466375546f9e08ae1792d60e0659c46ee433ed9d379f883caf651f9",
+      "payloads": [
+        {
+          "path": "executor",
+          "sha256": "8f724b9525898a63f8f3891dbe081319a27dedff0079d3b2bb934cdf1aa1ac74",
+          "size": 54726818
+        },
+        {
+          "path": "ssl/certs/ca-certificates.crt",
+          "sha256": "714d457d580922dbf1d0be8bd35ba236a842b50b0072ae791582a19adef772a5",
+          "size": 224449
+        },
+        {
+          "path": "tini",
+          "sha256": "c5b0666b4cb676901f90dfcb37106783c5fe2077b04590973b885950611b30ee",
+          "size": 870496
+        }
+      ],
+      "platform": "linux/amd64",
+      "signature": {
+        "cosignVersion": "v3.1.3",
+        "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/signature-verification.json",
+        "identity": "https://github.com/osscontainertools/kaniko/.github/workflows/images.yaml@refs/tags/v1.28.4",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "sha256": "c51afa750fe36544403d5238b177d875db07664800e1bc3862acd7efb0d410b7",
+        "size": 1425
+      },
+      "sources": [
+        {
+          "digest": "sha256:447ae463e61067e5c562f266861a156e000014fc2d03fe7d543f9e4c5b2c96e7",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/447ae463e61067e5c562f266861a156e000014fc2d03fe7d543f9e4c5b2c96e7",
+          "kind": "index",
+          "sha256": "447ae463e61067e5c562f266861a156e000014fc2d03fe7d543f9e4c5b2c96e7",
+          "size": 3872,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/manifests/sha256:447ae463e61067e5c562f266861a156e000014fc2d03fe7d543f9e4c5b2c96e7"
+        },
+        {
+          "digest": "sha256:a2194402f466375546f9e08ae1792d60e0659c46ee433ed9d379f883caf651f9",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/a2194402f466375546f9e08ae1792d60e0659c46ee433ed9d379f883caf651f9",
+          "kind": "manifest",
+          "sha256": "a2194402f466375546f9e08ae1792d60e0659c46ee433ed9d379f883caf651f9",
+          "size": 2957,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/manifests/sha256:a2194402f466375546f9e08ae1792d60e0659c46ee433ed9d379f883caf651f9"
+        },
+        {
+          "digest": "sha256:6b613e8444ed67b239e3d03b64858ad1d6eb48e24d89c2db4fed1d9582ffb416",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/6b613e8444ed67b239e3d03b64858ad1d6eb48e24d89c2db4fed1d9582ffb416",
+          "kind": "config",
+          "sha256": "6b613e8444ed67b239e3d03b64858ad1d6eb48e24d89c2db4fed1d9582ffb416",
+          "size": 3853,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:6b613e8444ed67b239e3d03b64858ad1d6eb48e24d89c2db4fed1d9582ffb416"
+        },
+        {
+          "digest": "sha256:941bc93400f2fb1404a74f068ebb4f1f1c594bb5bcac137fb73a739f29386e79",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/941bc93400f2fb1404a74f068ebb4f1f1c594bb5bcac137fb73a739f29386e79",
+          "kind": "layer",
+          "sha256": "941bc93400f2fb1404a74f068ebb4f1f1c594bb5bcac137fb73a739f29386e79",
+          "size": 96,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:941bc93400f2fb1404a74f068ebb4f1f1c594bb5bcac137fb73a739f29386e79"
+        },
+        {
+          "digest": "sha256:5ecab5922e6a5124fab96e8cb404b8cf93e8a96716af4fbbea2a9221b1216f86",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/5ecab5922e6a5124fab96e8cb404b8cf93e8a96716af4fbbea2a9221b1216f86",
+          "kind": "layer",
+          "sha256": "5ecab5922e6a5124fab96e8cb404b8cf93e8a96716af4fbbea2a9221b1216f86",
+          "size": 129496,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:5ecab5922e6a5124fab96e8cb404b8cf93e8a96716af4fbbea2a9221b1216f86"
+        },
+        {
+          "digest": "sha256:38359fdb892a873a58f78205c15b3d5b5b8f8d800305711b59ad6a8700d7afd3",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/38359fdb892a873a58f78205c15b3d5b5b8f8d800305711b59ad6a8700d7afd3",
+          "kind": "layer",
+          "sha256": "38359fdb892a873a58f78205c15b3d5b5b8f8d800305711b59ad6a8700d7afd3",
+          "size": 511,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:38359fdb892a873a58f78205c15b3d5b5b8f8d800305711b59ad6a8700d7afd3"
+        },
+        {
+          "digest": "sha256:7b945cf7a05f4a759480749fb36e1179af0be381d363cdcfd7369889af5a46bf",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/7b945cf7a05f4a759480749fb36e1179af0be381d363cdcfd7369889af5a46bf",
+          "kind": "layer",
+          "sha256": "7b945cf7a05f4a759480749fb36e1179af0be381d363cdcfd7369889af5a46bf",
+          "size": 3420382,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:7b945cf7a05f4a759480749fb36e1179af0be381d363cdcfd7369889af5a46bf"
+        },
+        {
+          "digest": "sha256:c60e1ac951a704239d9b1e5ac6ef00239c8f2decddd51779834a6225f311cf9e",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/c60e1ac951a704239d9b1e5ac6ef00239c8f2decddd51779834a6225f311cf9e",
+          "kind": "layer",
+          "sha256": "c60e1ac951a704239d9b1e5ac6ef00239c8f2decddd51779834a6225f311cf9e",
+          "size": 3823942,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:c60e1ac951a704239d9b1e5ac6ef00239c8f2decddd51779834a6225f311cf9e"
+        },
+        {
+          "digest": "sha256:78341d156f50c98dd5f1ade6bf746b3eda806d89cda5f712a29081d5bf635d3b",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/78341d156f50c98dd5f1ade6bf746b3eda806d89cda5f712a29081d5bf635d3b",
+          "kind": "layer",
+          "sha256": "78341d156f50c98dd5f1ade6bf746b3eda806d89cda5f712a29081d5bf635d3b",
+          "size": 3852336,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:78341d156f50c98dd5f1ade6bf746b3eda806d89cda5f712a29081d5bf635d3b"
+        },
+        {
+          "digest": "sha256:aa9f3f2a5ee45dfb023adaa960b670584030837eaada29fbf59b75b2b9f3fe30",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/aa9f3f2a5ee45dfb023adaa960b670584030837eaada29fbf59b75b2b9f3fe30",
+          "kind": "layer",
+          "sha256": "aa9f3f2a5ee45dfb023adaa960b670584030837eaada29fbf59b75b2b9f3fe30",
+          "size": 126,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:aa9f3f2a5ee45dfb023adaa960b670584030837eaada29fbf59b75b2b9f3fe30"
+        },
+        {
+          "digest": "sha256:7d73851cfaa712b4ffe55e0a9166e0e27168a92ab0628bc8b48752aaf64b60d0",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/7d73851cfaa712b4ffe55e0a9166e0e27168a92ab0628bc8b48752aaf64b60d0",
+          "kind": "layer",
+          "sha256": "7d73851cfaa712b4ffe55e0a9166e0e27168a92ab0628bc8b48752aaf64b60d0",
+          "size": 99,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:7d73851cfaa712b4ffe55e0a9166e0e27168a92ab0628bc8b48752aaf64b60d0"
+        },
+        {
+          "digest": "sha256:ce7aad4358f16f3519d09c3a0a75907e0876421e4fa4b88b39e57f67b5ec4427",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/ce7aad4358f16f3519d09c3a0a75907e0876421e4fa4b88b39e57f67b5ec4427",
+          "kind": "layer",
+          "sha256": "ce7aad4358f16f3519d09c3a0a75907e0876421e4fa4b88b39e57f67b5ec4427",
+          "size": 375356,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:ce7aad4358f16f3519d09c3a0a75907e0876421e4fa4b88b39e57f67b5ec4427"
+        },
+        {
+          "digest": "sha256:178745d29b29dc7eabe1112cddd1938ed36162d2903f65fd078ae17f982192ad",
+          "file": "artifacts/wolfi/ci/linux-amd64/vendor/kaniko/v1.28.4/linux-amd64/source/178745d29b29dc7eabe1112cddd1938ed36162d2903f65fd078ae17f982192ad",
+          "kind": "layer",
+          "sha256": "178745d29b29dc7eabe1112cddd1938ed36162d2903f65fd078ae17f982192ad",
+          "size": 17079245,
+          "url": "https://ghcr.io/v2/osscontainertools/kaniko/blobs/sha256:178745d29b29dc7eabe1112cddd1938ed36162d2903f65fd078ae17f982192ad"
+        }
+      ],
+      "version": "1.28.4"
     },
     "kubectl": {
       "checksumUrl": "https://dl.k8s.io/release/v1.37.0/bin/linux/amd64/kubectl.sha256",
@@ -3358,8 +3837,8 @@
         "url": "https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init",
         "version": "1.29.1"
       },
-      "sha256": "c728db721e8972cd49115bf39b485e94deb94e0aec529d38b8dc4456305a39bb",
-      "size": 252507309,
+      "sha256": "43abe6d659637c69b6eb9f96f14cc9fef9d4683c572d0a46a92a50c08bbe3d8c",
+      "size": 252507310,
       "targetTriple": "x86_64-unknown-linux-gnu",
       "toolchain": "nightly-2026-09-04"
     }

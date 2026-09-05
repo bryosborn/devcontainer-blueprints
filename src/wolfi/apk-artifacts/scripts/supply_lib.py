@@ -33,6 +33,15 @@ class SupplyError(RuntimeError):
     """Raised when an artifact or its immutable metadata is invalid."""
 
 
+class HTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject a downgrade before urllib sends the redirected request."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        if urllib.parse.urlsplit(new_url).scheme != "https":
+            raise SupplyError(f"artifact redirected to non-HTTPS: {new_url}")
+        return super().redirect_request(request, response, code, message, headers, new_url)
+
+
 def run(
     command: list[str],
     *,
@@ -208,13 +217,14 @@ def download(
     request = urllib.request.Request(
         url, headers={"User-Agent": "devcontainer-blueprints-wolfi-lock/1"}
     )
+    opener = urllib.request.build_opener(HTTPSRedirectHandler())
     last_error: OSError | urllib.error.URLError | None = None
     for attempt in range(5):
         temporary = destination.with_name(
             f".{destination.name}.{uuid.uuid4().hex}.tmp"
         )
         try:
-            with urllib.request.urlopen(request, timeout=180) as response, temporary.open(
+            with opener.open(request, timeout=180) as response, temporary.open(
                 "wb"
             ) as output:
                 if response.geturl() != url:
@@ -251,6 +261,10 @@ def download(
             os.replace(temporary, destination)
             return actual, False
         except (OSError, urllib.error.URLError) as error:
+            if isinstance(error, urllib.error.HTTPError) and error.code not in (
+                408, 429, 500, 502, 503, 504,
+            ):
+                raise SupplyError(f"download rejected: {url}: {error}") from error
             last_error = error
             if attempt == 4:
                 break
@@ -374,7 +388,7 @@ def get_config_path(config: Any, dot_path: str) -> tuple[bool, Any]:
 
 def load_package_mapping(path: Path) -> dict[str, Any]:
     value = load_json(path, "package-root mapping")
-    if not isinstance(value, dict) or set(value) != {
+    if not isinstance(value, dict) or set(value) - {"utilityCatalog"} != {
         "schemaVersion",
         "packages",
         "packageSets",
@@ -386,6 +400,11 @@ def load_package_mapping(path: Path) -> dict[str, Any]:
         raise SupplyError("package-root mapping packages must be a non-empty array")
     if not isinstance(value["packageSets"], dict) or not value["packageSets"]:
         raise SupplyError("package-root mapping packageSets must be a non-empty mapping")
+    if "utilityCatalog" in value:
+        catalog = load_json(path.parent / value["utilityCatalog"], "reviewed utility catalog")
+        for key, utility in catalog.items():
+            for package in utility["packages"]:
+                value["packages"].append({"module": "utilities", "configPath": f"utilities.{key}", **package})
     return value
 
 
@@ -513,6 +532,15 @@ def roots_for_modules(
             raise SupplyError(
                 f"package {root['name']} maps to conflicting repositories in one set"
             )
+        if existing is not None:
+            # A transitive component root may share a reviewed utility. Keep an
+            # explicit version constraint instead of losing it to iteration order.
+            constraints = {r["selector"] for r in (existing, root)
+                           if r.get("validateSelector", True) and r["selector"] != "latest"}
+            if len(constraints) > 1:
+                raise SupplyError(f"package {root['name']} maps to conflicting selectors in one set")
+            if existing["selector"] in constraints:
+                continue
         by_name[root["name"]] = root
     return [by_name[name] for name in sorted(by_name)]
 

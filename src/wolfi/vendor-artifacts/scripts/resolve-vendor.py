@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -72,16 +73,28 @@ def relative_to_repo(path: Path, repo_root: Path) -> str:
         raise SystemExit(f"ERROR: artifact is outside the repository: {path}") from error
 
 
+class HTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject a downgrade before urllib sends the redirected request."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        if urllib.parse.urlsplit(new_url).scheme != "https":
+            raise SystemExit(f"ERROR: artifact redirected to non-HTTPS: {new_url}")
+        return super().redirect_request(request, response, code, message, headers, new_url)
+
+
 def fetch_bytes(url: str, *, attempts: int = 5) -> bytes:
     if not url.startswith("https://"):
         raise SystemExit(f"ERROR: refusing non-HTTPS artifact URL: {url}")
+    if type(attempts) is not int or not 1 <= attempts <= 5:
+        raise SystemExit("ERROR: download attempts must be an integer from 1 through 5")
     request = urllib.request.Request(
         url, headers={"User-Agent": "devcontainer-blueprints-wolfi/1"}
     )
+    opener = urllib.request.build_opener(HTTPSRedirectHandler())
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with opener.open(request, timeout=120) as response:
                 final_url = response.geturl()
                 if not final_url.startswith("https://"):
                     raise SystemExit(
@@ -89,6 +102,10 @@ def fetch_bytes(url: str, *, attempts: int = 5) -> bytes:
                     )
                 return response.read()
         except (OSError, urllib.error.URLError) as error:
+            if isinstance(error, urllib.error.HTTPError) and error.code not in (
+                408, 429, 500, 502, 503, 504,
+            ):
+                raise SystemExit(f"ERROR: download rejected: {url}: {error}") from error
             last_error = error
             if attempt + 1 < attempts:
                 time.sleep(min(2 ** attempt, 8))
@@ -335,7 +352,7 @@ def generate_rust_source(
     config: dict[str, Any], repo_root: Path, destination: Path,
     base_image: str | None, rustup_init: Path, rustup_hash: str,
 ) -> Path:
-    rust = config["toolchain"]["rust"]
+    rust = config["build"]["rust"]
     if not base_image or "@sha256:" not in base_image:
         raise SystemExit("ERROR: Rust resolution requires --base-image with the pinned Wolfi digest")
     run(
@@ -359,7 +376,7 @@ def resolve_rust(
     config: dict[str, Any], artifact_root: Path, repo_root: Path, platform: dict[str, str],
     base_image: str | None,
 ) -> dict[str, Any]:
-    rust_config = config["toolchain"]["rust"]
+    rust_config = config["build"]["rust"]
     toolchain = rust_config["toolchain"]
     components = rust_config["components"]
     target_triple = platform["rust"]
@@ -477,15 +494,21 @@ def main() -> None:
         resolved["vscode"] = vscode
         if extensions is not None:
             resolved["extensions"] = extensions
-    if "kubectl" in config["toolchain"]:
+    if "kubectl" in config["utilities"]:
         resolved["kubectl"] = resolve_kubectl(
-            config["toolchain"]["kubectl"],
+            config["utilities"]["kubectl"],
             artifact_root,
             repo_root,
             platform["kubectl"],
         )
-    if "rust" in config["toolchain"]:
+    if "rust" in config["build"]:
         resolved["rust"] = resolve_rust(config, artifact_root, repo_root, platform, args.base_image)
+    if "kaniko" in config:
+        from kaniko_supply import resolve_kaniko
+        resolved["kaniko"] = resolve_kaniko(config, artifact_root, repo_root)
+    if "playwright" in config:
+        from playwright_supply import resolve
+        resolved["playwright"] = resolve(config, artifact_root, repo_root)
 
     fragment = {
         "schemaVersion": 1,

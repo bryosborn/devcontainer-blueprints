@@ -72,9 +72,9 @@ def main():
     if not socket:
         assert not any(m.get("mounts") or m.get("entrypoint") for m in metadata), "socket metadata leaked"
         assert not any(e.startswith(("DOCKER_HOST=", "WOLFI_DOD_")) for e in details["Config"].get("Env", []))
-    tools = config["toolchain"]
+    tools = {**config["build"], **config["utilities"]}
     env = {"EXPECTED_USER": user, "EXPECTED_HOME": home, "DEVCONTAINER": str(config.get("devcontainer", False)).lower(),
-           "BUILD_ENABLED": str("build" in tools).lower(), "CLANG_ENABLED": str("clang" in tools.get("build", {})).lower(),
+           "BUILD_ENABLED": str("native" in tools).lower(), "CLANG_ENABLED": str("clang" in tools.get("native", {})).lower(),
            "PYTHON_SELECTORS": " ".join(tools.get("python", [])), "RUST_TOOLCHAIN": tools.get("rust", {}).get("toolchain", ""),
            "RUST_COMPONENTS": " ".join(tools.get("rust", {}).get("components", []))}
     for key in ("java", "maven", "node", "npm", "clamav", "kubectl", "yq", "helm", "oras", "mongosh"):
@@ -82,9 +82,14 @@ def main():
     env["MONGODB_TOOLS_SELECTOR"] = tools.get("mongodbDatabaseTools", "")
     for key in ("cli", "buildx", "compose"):
         env["DOCKER_" + key.upper()] = str(key in config.get("docker", {})).lower()
+    catalog = json.loads((ROOT / "src/wolfi/components/utilities/catalog.json").read_text())
+    env["UTILITIES_JSON"] = json.dumps({key: catalog[key] for key in config["utilities"]})
+    env["PLAYWRIGHT_ENABLED"] = str("playwright" in config).lower()
     base = ["docker", "run", "--rm", "--platform", platform, "--network=none", "--entrypoint", "/bin/bash"]
-    run_script(image, platform, (HERE / "test-runtime.sh").read_text(), env)
-    absent = ["dockerd", "containerd", "kaniko", "executor"]
+    run_script(image, platform, (HERE / "test-runtime.sh").read_text() + "\n" + (ROOT / "src/wolfi/components/utilities/test.sh").read_text(), env)
+    absent = ["dockerd", "containerd"]
+    if "kaniko" not in config:
+        absent += ["kaniko-build", "executor"]
     for key, executable in {"kubectl": "kubectl", "rust": "rustc", "helm": "helm", "oras": "oras",
                             "mongosh": "mongosh", "mongodbDatabaseTools": "mongodump", "clamav": "clamscan"}.items():
         if key not in tools:
@@ -96,6 +101,23 @@ def main():
     run([*base, image, "-c", absence_script, "wolfi-absence", *absent])
     if not socket:
         run([*base, image, "-c", "test ! -e /usr/local/share/wolfi-dod; test ! -S /var/run/docker.sock"])
+    if "playwright" not in config:
+        assert not any(e.startswith("PLAYWRIGHT_") for e in details["Config"].get("Env", []))
+        run([*base, image, "-c", "test ! -e /opt/playwright"])
+    else:
+        command = ["python3", ROOT / "src/wolfi/components/playwright/test-image.py", "--lock", args.lock]
+        if args.quick:
+            command += ["--quick"]
+        run(command)
+    if "kaniko" in config:
+        run([*base, image, "-c", "test -x /kaniko/executor; /kaniko/executor version; test -x /usr/local/bin/kaniko-build"])
+        if not args.quick:
+            artifact = lock["resolved"]["apk"]["baseImage"]["artifact"]
+            run([ROOT / "src/wolfi/components/kaniko/test-build.py", "--image", image, "--platform", platform,
+                 "--base-archive", ROOT / artifact["artifactDirectory"] / artifact["file"],
+                 "--base-sha256", artifact["sha256"]])
+    else:
+        run([*base, image, "-c", "test ! -e /kaniko"])
     if "vscode" in config:
         command = [HERE / "test-vscode.sh", "--lock", args.lock]
         if args.quick:

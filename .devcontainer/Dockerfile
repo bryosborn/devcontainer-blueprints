@@ -43,6 +43,22 @@ RUN set -eux; \
     trivy --version
 
 
+
+ARG COSIGN_VERSION=3.1.3
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) cosign_sha256=4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71 ;; \
+      arm64) cosign_sha256=c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a ;; \
+      *) exit 1 ;; \
+    esac; \
+    curl -fsSL --proto '=https' --proto-redir '=https' \
+      "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-${TARGETARCH}" -o /tmp/cosign; \
+    echo "${cosign_sha256}  /tmp/cosign" | sha256sum -c -; \
+    install -m 0755 /tmp/cosign /usr/local/bin/cosign; \
+    rm /tmp/cosign; \
+    cosign version
+
+
 ARG SHELLCHECK_VERSION=0.11.0
 RUN set -eux; \
     case "${TARGETARCH}" in \
@@ -61,6 +77,8 @@ ENV TRIVY_CACHE_DIR=/home/vscode/.cache/trivy \
     DOCKER_HOST=unix:///var/run/docker.sock \
     WOLFI_DOD_REMOTE_USER=vscode
 RUN mkdir -p "${TRIVY_CACHE_DIR}" && chown vscode:vscode "${TRIVY_CACHE_DIR}"
+COPY src/wolfi/components/base/finalize-home.sh /tmp/finalize-home.sh
+RUN /bin/sh /tmp/finalize-home.sh vscode && rm /tmp/finalize-home.sh
 USER vscode
 WORKDIR /workspaces
 ENTRYPOINT ["/usr/local/share/wolfi-dod/docker-socket-proxy-entrypoint.sh"]

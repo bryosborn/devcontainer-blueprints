@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   DEFAULT_CONFIG_PATH,
+  UTILITY_CATALOG,
+  PLAYWRIGHT_VERSION,
   WolfiConfigError,
   canonicalJson,
   loadWolfiConfig,
@@ -66,17 +68,19 @@ function expectConfigError(fn, pattern) {
 test("loads the repository Wolfi configuration", () => {
   assert.equal(validConfig.schemaVersion, 2);
   assert.equal(validConfig.image.platform, "linux/amd64");
-  assert.equal(validConfig.toolchain.helm, "4");
-  assert.equal(validConfig.toolchain.oras, "1");
-  assert.equal(validConfig.toolchain.mongosh, "2");
-  assert.equal(validConfig.toolchain.mongodbDatabaseTools, "100");
-  assert.ok(validConfig.toolchain.rust.components.includes("rust-analyzer"));
+  assert.equal(validConfig.utilities.helm, "4");
+  assert.equal(validConfig.utilities.oras, "1");
+  assert.equal(validConfig.utilities.mongosh, "2");
+  assert.equal(validConfig.utilities.mongodbDatabaseTools, "100");
+  assert.ok(validConfig.build.rust.components.includes("rust-analyzer"));
   assert.equal(validConfig.vscode.extensions.length, 15);
 });
 
 test("CI and development profiles select the same tools with isolated outputs", () => {
   const ci = loadWolfiConfig(path.join(path.dirname(DEFAULT_CONFIG_PATH), "wolfi-ci.yaml"));
-  assert.deepEqual(ci.toolchain, validConfig.toolchain);
+  assert.deepEqual(ci.build, validConfig.build);
+  assert.deepEqual(ci.utilities, validConfig.utilities);
+  assert.deepEqual(ci.kaniko, {version: "1.28.4"});
   assert.equal(ci.devcontainer, false);
   for (const key of ["user", "docker", "vscode"]) assert.equal(key in ci, false);
   assert.notEqual(ci.artifacts.root, validConfig.artifacts.root);
@@ -85,9 +89,9 @@ test("CI and development profiles select the same tools with isolated outputs", 
 
 test("minimal profiles need no identity, editor, Docker, or toolchain", () => {
   const config = clone(validConfig);
-  for (const key of ["user", "docker", "vscode", "toolchain", "devcontainer"]) delete config[key];
+  for (const key of ["user", "docker", "vscode", "build", "utilities", "kaniko", "playwright", "devcontainer"]) delete config[key];
   const normalized = validateWolfiConfig(config);
-  assert.deepEqual(normalized.toolchain, {});
+  assert.deepEqual(normalized.build, {});
   assert.equal(normalized.devcontainer, false);
   assert.equal("user" in normalized, false);
   assert.equal("docker" in normalized, false);
@@ -133,7 +137,7 @@ test("socket integration validates CLI, remote identity, and devcontainer startu
 });
 
 test("rejects null optional mappings and ambiguous legacy schema", () => {
-  for (const key of ["user", "docker", "vscode", "toolchain", "devcontainer"]) {
+  for (const key of ["user", "docker", "vscode", "build", "utilities", "kaniko", "playwright", "devcontainer"]) {
     const config = clone(validConfig);
     config[key] = null;
     expectConfigError(() => validateWolfiConfig(config), /must be a mapping|must be a boolean/);
@@ -145,26 +149,26 @@ test("rejects null optional mappings and ambiguous legacy schema", () => {
 
 test("offline Rust analyzer extensions require the locked language server component", () => {
   const config = clone(validConfig);
-  config.toolchain.rust.components = ["rust-src"];
+  config.build.rust.components = ["rust-src"];
   expectConfigError(() => validateWolfiConfig(config), /rust-analyzer.*offline activation/);
 });
 
 test("Rust selectors must match the installer's dated nightly contract", () => {
   for (const selector of ["stable", "beta", "nightly", "latest", "1.99.0", "nightly-2026-9-4", "nightly-2026-09-04-x86_64-unknown-linux-gnu"]) {
     const config = clone(validConfig);
-    config.toolchain.rust.toolchain = selector;
-    expectConfigError(() => validateWolfiConfig(config), /toolchain\.rust\.toolchain: must be a dated nightly/);
+    config.build.rust.toolchain = selector;
+    expectConfigError(() => validateWolfiConfig(config), /build\.rust\.toolchain: must be a dated nightly/);
   }
   const config = clone(validConfig);
-  config.toolchain.rust.toolchain = "nightly-2026-09-04";
-  assert.equal(validateWolfiConfig(config).toolchain.rust.toolchain, "nightly-2026-09-04");
+  config.build.rust.toolchain = "nightly-2026-09-04";
+  assert.equal(validateWolfiConfig(config).build.rust.toolchain, "nightly-2026-09-04");
 });
 
 test("Rust may select no optional components without an analyzer VSIX", () => {
   const config = clone(validConfig);
   delete config.vscode;
-  config.toolchain.rust.components = [];
-  assert.deepEqual(validateWolfiConfig(config).toolchain.rust.components, []);
+  config.build.rust.components = [];
+  assert.deepEqual(validateWolfiConfig(config).build.rust.components, []);
   config.vscode = { version: "1.136.1", extensions: ["rust-lang.rust-analyzer"] };
   expectConfigError(() => validateWolfiConfig(config), /rust-analyzer.*offline activation/);
 });
@@ -289,33 +293,33 @@ test("requires HTTPS repositories without embedded credentials", () => {
 
 test("treats optional tool keys as enable switches", () => {
   const config = clone(validConfig);
-  delete config.toolchain.helm;
-  delete config.toolchain.oras;
+  delete config.utilities.helm;
+  delete config.utilities.oras;
   const normalized = validateWolfiConfig(config);
-  assert.equal("helm" in normalized.toolchain, false);
-  assert.equal("oras" in normalized.toolchain, false);
-  assert.equal(normalized.toolchain.mongosh, "2");
+  assert.equal("helm" in normalized.utilities, false);
+  assert.equal("oras" in normalized.utilities, false);
+  assert.equal(normalized.utilities.mongosh, "2");
 });
 
 test("native build tools can be selected without Clang", () => {
   const config = clone(validConfig);
-  config.toolchain.build = {};
-  assert.deepEqual(validateWolfiConfig(config).toolchain.build, {});
+  config.build.native = {};
+  assert.deepEqual(validateWolfiConfig(config).build.native, {});
 });
 
 test("requires Maven and npm runtimes when those tools are enabled", () => {
   const withoutJava = clone(validConfig);
-  delete withoutJava.toolchain.java;
-  expectConfigError(() => validateWolfiConfig(withoutJava), /maven.*requires toolchain\.java/);
+  delete withoutJava.build.java;
+  expectConfigError(() => validateWolfiConfig(withoutJava), /maven.*requires build\.java/);
 
   const withoutNode = clone(validConfig);
-  delete withoutNode.toolchain.node;
-  expectConfigError(() => validateWolfiConfig(withoutNode), /npm.*requires toolchain\.node/);
+  delete withoutNode.build.node;
+  expectConfigError(() => validateWolfiConfig(withoutNode), /npm.*requires build\.node/);
 });
 
 test("accepts only supported frozen Rust components", () => {
   const config = clone(validConfig);
-  config.toolchain.rust.components[0] = "rust-docs";
+  config.build.rust.components[0] = "rust-docs";
   expectConfigError(() => validateWolfiConfig(config), /unsupported component: rust-docs/);
 });
 
@@ -439,6 +443,42 @@ test("base-resolution intermediates require explicit incomplete-lock verificatio
   expectConfigError(() => verifyWolfiLock(validConfig, lock), /must contain the artifact mapping/);
 });
 
+test("legacy toolchain entries receive migration guidance", () => {
+  expectConfigError(() => validateWolfiConfig({...validConfig, toolchain: {}}), /migrate.*build.*utilities/);
+});
+
+test("every reviewed utility works independently and unsafe umbrella packages are rejected", () => {
+  for (const key of Object.keys(UTILITY_CATALOG)) {
+    const config = clone(validConfig);
+    config.utilities = {[key]: UTILITY_CATALOG[key].exampleSelector};
+    assert.deepEqual(validateWolfiConfig(config).utilities, config.utilities);
+  }
+  for (const key of ["openssh", "openssh-server", "alpine-sdk", "curl-minimal"]) {
+    expectConfigError(() => validateWolfiConfig({...validConfig, utilities: {[key]: "latest"}}), /unknown field/);
+  }
+});
+
+test("Playwright supports a maintained default, an exact version, and complete omission", () => {
+  assert.deepEqual(validateWolfiConfig({...validConfig, playwright: true}).playwright, {version: PLAYWRIGHT_VERSION});
+  assert.deepEqual(validateWolfiConfig({...validConfig, playwright: {version: "1.63.0"}}).playwright, {version: "1.63.0"});
+  assert.equal("playwright" in validateWolfiConfig({...validConfig, playwright: false}), false);
+  for (const playwright of [null, {}, "true", {version: "latest"}, {version: "1.63"}, {version: "1.63.0", firefox: true}]) {
+    expectConfigError(() => validateWolfiConfig({...validConfig, playwright}), /playwright/);
+  }
+  for (const build of [{}, {node: "24"}]) {
+    expectConfigError(() => validateWolfiConfig({...validConfig, vscode: {version: "1.136.1"}, build, playwright: true}), /requires build.node and build.npm/);
+  }
+});
+
+test("Kaniko is independent of Docker and requires an exact version", () => {
+  const config = { ...validConfig, kaniko: {version: "1.28.4"}};
+  delete config.docker;
+  assert.deepEqual(validateWolfiConfig(config).kaniko, {version: "1.28.4"});
+  for (const kaniko of [true, null, {}, {version: "latest"}, {version: "1.28"}]) {
+    expectConfigError(() => validateWolfiConfig({...validConfig, kaniko}), /kaniko/);
+  }
+});
+
 test("complete default locks retain all selected artifact records", () => {
   for (const configName of ["wolfi-ci.yaml", "wolfi-dev.yaml"]) {
     const configPath = path.join(path.dirname(DEFAULT_CONFIG_PATH), configName);
@@ -466,6 +506,17 @@ test("frozen locks reject absent, null, empty, and non-object selected vendor re
       else lock.resolved[name] = replacement;
       expectConfigError(() => verifyWolfiLock(validConfig, lock), new RegExp(`lock\\.resolved\\.${name}: must contain`));
     }
+  }
+});
+
+test("frozen Kaniko records must match the selected version and architecture", () => {
+  const configPath = path.join(path.dirname(DEFAULT_CONFIG_PATH), "wolfi-ci.yaml");
+  const config = loadWolfiConfig(configPath);
+  const complete = JSON.parse(fs.readFileSync(companionLockPath(configPath), "utf8"));
+  for (const patch of [{version: "1.28.3"}, {platform: "linux/arm64"}]) {
+    const lock = clone(complete);
+    Object.assign(lock.resolved.kaniko, patch);
+    expectConfigError(() => verifyWolfiLock(config, lock), /version\/platform differs/);
   }
 });
 

@@ -290,6 +290,18 @@ def scan(profile: Profile, args: argparse.Namespace) -> None:
         report = {**acceptance, "sizeBytes": identity.get("Size"), "trivy": context,
                   "uninstalledVsixArchiveExcluded": archive_excluded,
                   "lowerSeveritiesRequireReview": True}
+        browser_note = ""
+        playwright = profile.lock["resolved"].get("playwright")
+        if playwright:
+            report["browserInventory"] = {
+                "playwrightVersion": playwright["version"], "platform": playwright["platform"],
+                "browsers": [{key: browser[key] for key in ("name", "revision", "browserVersion", "sha256")}
+                             for browser in playwright["browsers"]],
+                "advisoryCoverage": "Downloaded browser binary advisory coverage is not established by Trivy; raw zero findings is not proof of complete coverage."}
+            browser_note = ("\nPlaywright " + playwright["version"] + ": "
+                            + ", ".join(f"{b['name']} {b['browserVersion']} (revision {b['revision']})" for b in playwright["browsers"])
+                            + ". Downloaded browser binary advisory coverage is not established by Trivy; "
+                            "zero raw findings does not prove complete browser coverage.\n")
         write_json(stage / "report.json", report)
         status = "PASS" if passed else ("FAIL" if evaluated else "NOT EVALUATED")
         (stage / "report.md").write_text(
@@ -298,7 +310,8 @@ def scan(profile: Profile, args: argparse.Namespace) -> None:
             + " | ".join(SEVERITIES) + "\n" + " | ".join("---" for _ in SEVERITIES) + "\n"
             + " | ".join(str(counts[s]) for s in SEVERITIES)
             + "\n\nLower-severity findings require review.\n"
-            + ("The uninstalled VSIX transfer archive was excluded.\n" if archive_excluded else "No image paths were excluded.\n"),
+            + ("The uninstalled VSIX transfer archive was excluded.\n" if archive_excluded else "No image paths were excluded.\n")
+            + browser_note,
             encoding="utf-8")
         output.mkdir(parents=True, exist_ok=True)
         for source in stage.iterdir():
@@ -341,6 +354,14 @@ def locked_files(profile: Profile) -> dict[str, str]:
     if resolved.get("extensions"):
         extensions = resolved["extensions"]
         for record in [extensions["archive"], extensions["lockfile"], *extensions["packages"]]:
+            add(record["file"], record["sha256"])
+    if resolved.get("kaniko"):
+        kaniko = resolved["kaniko"]
+        for record in [kaniko["archive"], kaniko["signature"], *kaniko["sources"]]:
+            add(record["file"], record["sha256"])
+    if resolved.get("playwright"):
+        playwright = resolved["playwright"]
+        for record in [playwright["archive"], playwright["testRunner"], *playwright["packages"], *playwright["browsers"]]:
             add(record["file"], record["sha256"])
     return files
 

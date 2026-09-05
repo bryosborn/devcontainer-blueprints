@@ -11,7 +11,7 @@ spec.loader.exec_module(build)
 
 class ImageConfigurationTests(unittest.TestCase):
     def footer(self, **config):
-        return build.image_footer({'config': {'toolchain': {}, **config}})
+        return build.image_footer({'config': {'build': {}, 'utilities': {}, **config}})
 
     def test_root_ci_has_no_optional_runtime_environment(self):
         result = self.footer()
@@ -29,7 +29,7 @@ class ImageConfigurationTests(unittest.TestCase):
 
     def test_rust_caches_follow_root_and_custom_user_homes(self):
         for user, home in [(None, '/root'), ({'name': 'developer'}, '/home/developer')]:
-            config = {'toolchain': {'rust': {'toolchain': 'nightly-2026-09-04'}}}
+            config = {'build': {'rust': {'toolchain': 'nightly-2026-09-04'}}}
             if user:
                 config['user'] = user
             result = self.footer(**config)

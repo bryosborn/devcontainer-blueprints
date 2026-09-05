@@ -23,3 +23,16 @@ RUN --mount=type=bind,from=wolfi_vendor,target=/mnt/vendor,ro \
     --mount=type=bind,source=components,target=/mnt/components,ro \
     --mount=type=bind,source=lock.json,target=/mnt/lock.json,ro \
     /bin/bash /mnt/components/base/install-vendor.sh rust
+
+RUN --mount=type=bind,from=wolfi_vendor,target=/mnt/vendor,ro \
+    --mount=type=bind,source=components,target=/mnt/components,ro \
+    --mount=type=bind,source=lock.json,target=/mnt/lock.json,ro \
+    /bin/bash /mnt/components/base/install-vendor.sh kaniko
+
+RUN --mount=type=bind,from=wolfi_vendor,target=/mnt/vendor,ro \
+    --mount=type=bind,source=components,target=/mnt/components,ro \
+    --mount=type=bind,source=lock.json,target=/mnt/lock.json,ro \
+    /bin/bash /mnt/components/base/install-vendor.sh playwright
+RUN --mount=type=bind,source=components/base/finalize-home.sh,target=/tmp/finalize-home.sh,ro \
+    --mount=type=bind,source=lock.json,target=/mnt/lock.json,ro \
+    /bin/sh /tmp/finalize-home.sh "$(jq -r '.config.user.name // "root"' /mnt/lock.json)"

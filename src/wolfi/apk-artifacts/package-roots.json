@@ -1,50 +1,381 @@
 {
   "schemaVersion": 1,
   "packages": [
-    {"module": "base", "name": "bash", "repository": "main"},
-    {"module": "base", "name": "ca-certificates", "repository": "main"},
-    {"module": "base", "name": "coreutils", "repository": "main"},
-    {"module": "base", "name": "grep", "repository": "main"},
-    {"module": "base", "name": "jq", "repository": "main"},
-    {"module": "base", "name": "gnutar", "repository": "main"},
-    {"module": "base", "name": "gzip", "repository": "main"},
-    {"module": "base", "name": "posix-libc-utils", "repository": "main"},
-    {"module": "base", "name": "git", "repository": "main"},
-
-    {"module": "user", "name": "shadow", "repository": "main", "configPath": "user"},
-
-    {"module": "devcontainer", "name": "sudo", "repository": "main", "configPath": "devcontainer"},
-
-    {"module": "docker-socket", "name": "socat", "repository": "main", "configPath": "docker.socket"},
-
-    {"module": "docker", "name": "docker-cli", "repository": "main", "configPath": "docker.cli"},
-    {"module": "docker", "name": "docker-cli-buildx", "repository": "main", "configPath": "docker.buildx"},
-    {"module": "docker", "name": "docker-compose", "repository": "main", "configPath": "docker.compose"},
-
-    {"module": "vscode", "name": "glibc", "repository": "main", "configPath": "vscode"},
-    {"module": "vscode", "name": "libstdc++", "repository": "main", "configPath": "vscode"},
-
-    {"module": "toolchain", "name": "build-base", "repository": "main", "configPath": "toolchain.build"},
-    {"module": "toolchain", "name": "build-base", "repository": "main", "configPath": "toolchain.rust", "unlessConfigPath": "toolchain.build"},
-    {"module": "toolchain", "name": "clang-22", "repository": "main", "configPath": "toolchain.build.clang"},
-    {"module": "toolchain", "name": "cmake", "repository": "main", "configPath": "toolchain.build"},
-    {"module": "toolchain", "name": "openssl-dev", "repository": "main", "configPath": "toolchain.build"},
-    {"module": "toolchain", "name": "openssl", "repository": "main", "configPath": "toolchain.build"},
-    {"module": "toolchain", "nameTemplate": "python-{selector}-base", "repository": "main", "configPath": "toolchain.python", "each": true},
-    {"module": "toolchain", "nameTemplate": "py{selector}-pip-base", "repository": "main", "configPath": "toolchain.python", "each": true, "validateSelector": false},
-    {"module": "toolchain", "nameTemplate": "openjdk-{selector}-default-jdk", "repository": "main", "configPath": "toolchain.java"},
-    {"module": "toolchain", "nameTemplate": "maven-{selector}", "repository": "main", "configPath": "toolchain.maven"},
-    {"module": "toolchain", "nameTemplate": "nodejs-{selector}", "repository": "main", "configPath": "toolchain.node"},
-    {"module": "toolchain", "nameTemplate": "npm-{selector}", "repository": "main", "configPath": "toolchain.npm"},
-    {"module": "toolchain", "name": "corepack", "repository": "main", "configPath": "toolchain.node", "validateSelector": false},
-    {"module": "toolchain", "nameTemplate": "clamav-{selector}-scanner", "repository": "main", "configPath": "toolchain.clamav"},
-    {"module": "toolchain", "name": "yq", "repository": "main", "configPath": "toolchain.yq"},
-    {"module": "toolchain", "nameTemplate": "helm-{selector}", "repository": "main", "configPath": "toolchain.helm"},
-    {"module": "toolchain", "name": "oras", "repository": "main", "configPath": "toolchain.oras"},
-    {"module": "toolchain", "name": "mongosh", "repository": "extra", "configPath": "toolchain.mongosh"},
-    {"module": "toolchain", "name": "mongo-tools", "repository": "main", "configPath": "toolchain.mongodbDatabaseTools"}
+    {
+      "module": "base",
+      "name": "bash",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "ca-certificates",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "coreutils",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "grep",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "jq",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "gnutar",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "gzip",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "posix-libc-utils",
+      "repository": "main"
+    },
+    {
+      "module": "base",
+      "name": "git",
+      "repository": "main"
+    },
+    {
+      "module": "user",
+      "name": "shadow",
+      "repository": "main",
+      "configPath": "user"
+    },
+    {
+      "module": "devcontainer",
+      "name": "sudo",
+      "repository": "main",
+      "configPath": "devcontainer"
+    },
+    {
+      "module": "docker-socket",
+      "name": "socat",
+      "repository": "main",
+      "configPath": "docker.socket"
+    },
+    {
+      "module": "docker",
+      "name": "docker-cli",
+      "repository": "main",
+      "configPath": "docker.cli"
+    },
+    {
+      "module": "docker",
+      "name": "docker-cli-buildx",
+      "repository": "main",
+      "configPath": "docker.buildx"
+    },
+    {
+      "module": "docker",
+      "name": "docker-compose",
+      "repository": "main",
+      "configPath": "docker.compose"
+    },
+    {
+      "module": "vscode",
+      "name": "glibc",
+      "repository": "main",
+      "configPath": "vscode"
+    },
+    {
+      "module": "vscode",
+      "name": "libstdc++",
+      "repository": "main",
+      "configPath": "vscode"
+    },
+    {
+      "module": "build",
+      "name": "build-base",
+      "repository": "main",
+      "configPath": "build.native"
+    },
+    {
+      "module": "build",
+      "name": "build-base",
+      "repository": "main",
+      "configPath": "build.rust",
+      "unlessConfigPath": "build.native"
+    },
+    {
+      "module": "build",
+      "name": "clang-22",
+      "repository": "main",
+      "configPath": "build.native.clang"
+    },
+    {
+      "module": "build",
+      "name": "cmake",
+      "repository": "main",
+      "configPath": "build.native"
+    },
+    {
+      "module": "build",
+      "name": "openssl-dev",
+      "repository": "main",
+      "configPath": "build.native"
+    },
+    {
+      "module": "build",
+      "name": "openssl",
+      "repository": "main",
+      "configPath": "build.native"
+    },
+    {
+      "module": "build",
+      "nameTemplate": "python-{selector}-base",
+      "repository": "main",
+      "configPath": "build.python",
+      "each": true
+    },
+    {
+      "module": "build",
+      "nameTemplate": "py{selector}-pip-base",
+      "repository": "main",
+      "configPath": "build.python",
+      "each": true,
+      "validateSelector": false
+    },
+    {
+      "module": "build",
+      "nameTemplate": "openjdk-{selector}-default-jdk",
+      "repository": "main",
+      "configPath": "build.java"
+    },
+    {
+      "module": "build",
+      "nameTemplate": "maven-{selector}",
+      "repository": "main",
+      "configPath": "build.maven"
+    },
+    {
+      "module": "build",
+      "nameTemplate": "nodejs-{selector}",
+      "repository": "main",
+      "configPath": "build.node"
+    },
+    {
+      "module": "build",
+      "nameTemplate": "npm-{selector}",
+      "repository": "main",
+      "configPath": "build.npm"
+    },
+    {
+      "module": "build",
+      "name": "corepack",
+      "repository": "main",
+      "configPath": "build.node",
+      "validateSelector": false
+    },
+    {
+      "module": "playwright",
+      "name": "alsa-lib",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libatk-bridge-2.0",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libatk-1.0",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "at-spi2-core",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "cairo",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "cups-libs",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "dbus-libs",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libdrm-libs",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "mesa-gbm",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "glib",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libnspr",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libnss",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "pango",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libx11",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxcb",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxcomposite",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxdamage",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxext",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxfixes",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxkbcommon",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libxrandr",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "fontconfig",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "freetype",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "font-liberation",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "font-noto-cjk",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "font-noto-emoji",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "font-noto-thai",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "xvfb-run",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "xkeyboard-config",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "xkbcomp",
+      "repository": "main",
+      "configPath": "playwright"
+    },
+    {
+      "module": "playwright",
+      "name": "libudev",
+      "repository": "main",
+      "configPath": "playwright"
+    }
   ],
   "packageSets": {
-    "final": ["base", "user", "devcontainer", "docker", "docker-socket", "vscode", "toolchain"]
-  }
+    "final": [
+      "base",
+      "user",
+      "devcontainer",
+      "docker",
+      "docker-socket",
+      "vscode",
+      "build",
+      "utilities",
+      "playwright"
+    ]
+  },
+  "utilityCatalog": "../components/utilities/catalog.json"
 }

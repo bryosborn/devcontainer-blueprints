@@ -5,6 +5,10 @@ test "$(id -un)" = "${EXPECTED_USER}"
 test "${HOME}" = "${EXPECTED_HOME}"
 touch "${HOME}/.wolfi-toolchain-write-test"
 rm "${HOME}/.wolfi-toolchain-write-test"
+mkdir -p "${HOME}/.cache/Microsoft"
+touch "${HOME}/.cache/Microsoft/.wolfi-write-test"
+rm "${HOME}/.cache/Microsoft/.wolfi-write-test"
+test "$(stat -c %u "${HOME}/.cache")" = "$(id -u)"
 if [ "${DEVCONTAINER}" = true ]; then sudo -n true; fi
 test "$(stat -c '%U:%G' /opt)" = "root:root"
 test "$(stat -c '%U:%G' /workspaces)" = "root:root"
@@ -162,8 +166,11 @@ done
 for process_file in /proc/[0-9]*/comm; do
   case "$(cat "$process_file" 2>/dev/null || true)" in dockerd|containerd) exit 1 ;; esac
 done
-for forbidden_package in \
-  docker docker-dind containerd ffmpeg font-noto gtk+3.0 xorg-server mesa chromium electron; do
+forbidden_packages="docker docker-dind containerd ffmpeg font-noto chromium electron"
+if [ "${PLAYWRIGHT_ENABLED}" != true ]; then
+  forbidden_packages="$forbidden_packages fontconfig gtk+3.0 xorg-server mesa xvfb-run font-noto-cjk font-noto-emoji font-noto-thai"
+fi
+for forbidden_package in $forbidden_packages; do
   if apk info --installed "${forbidden_package}" >/dev/null 2>&1; then echo "Forbidden package: $forbidden_package" >&2; exit 1; fi
 done
 

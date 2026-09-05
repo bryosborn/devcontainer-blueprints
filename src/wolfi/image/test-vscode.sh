@@ -320,12 +320,8 @@ CONTAINER_ID="$(docker create \
       ! -name "${EXPECTED_VSCODE_COMMIT}" -print -quit)"
     echo "Verified reuse of the locked VS Code Server commit with networking disabled; no second server layout appeared."
 
-    for forbidden_package in ffmpeg fontconfig xorg-server; do
-      if apk info -e "${forbidden_package}" >/dev/null 2>&1; then
-        echo "ERROR: Broad GUI/multimedia package is present: ${forbidden_package}" >&2
-        exit 1
-      fi
-    done
+    # Profile-wide package exclusions live in test-runtime.sh, which accounts
+    # for optional Playwright prerequisites alongside the VS Code component.
     echo WOLFI_VSCODE_SCRIPT_COMPLETED
   ')"
 

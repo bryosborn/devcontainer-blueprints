@@ -11,13 +11,16 @@
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"
   ],
-  "securityOpt": ["label=disable"],
+  "securityOpt": [
+    "label=disable"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-vscode-remote.remote-containers",
         "timonwong.shellcheck",
-        "openai.chatgpt"
+        "openai.chatgpt",
+        "redhat.vscode-yaml"
       ]
     }
   },

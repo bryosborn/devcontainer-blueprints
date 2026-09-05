@@ -125,7 +125,7 @@ UPDATE_ARGS=(
   --base-lock "${BASE_LOCK}"
   --resolution-file "${APK_FRAGMENT}"
 )
-if jq -e 'has("vscode") or (.toolchain | has("kubectl") or has("rust"))' "${CONFIG_JSON}" >/dev/null; then
+if jq -e 'has("vscode") or has("kaniko") or has("playwright") or (.utilities | has("kubectl")) or (.build | has("rust"))' "${CONFIG_JSON}" >/dev/null; then
   python3 "${REPO_ROOT}/src/wolfi/vendor-artifacts/scripts/resolve-vendor.py" \
     --config-json "${CONFIG_JSON}" \
     --config-hash "${CONFIG_HASH}" \

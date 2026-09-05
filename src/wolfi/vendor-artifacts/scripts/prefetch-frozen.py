@@ -10,6 +10,7 @@ import os
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -53,6 +54,17 @@ def validate_hash(value: object, label: str) -> str:
     return value
 
 
+class HTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject a downgrade before urllib sends the redirected request."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        if urllib.parse.urlsplit(new_url).scheme != "https":
+            raise SystemExit(
+                f"ERROR: locked artifact redirected to non-HTTPS: {new_url}"
+            )
+        return super().redirect_request(request, response, code, message, headers, new_url)
+
+
 def fetch(url: object, destination: Path, expected: str, *, offline: bool = False) -> None:
     if not isinstance(url, str) or not url.startswith("https://"):
         raise SystemExit(f"ERROR: refusing non-HTTPS locked URL: {url}")
@@ -73,11 +85,12 @@ def fetch(url: object, destination: Path, expected: str, *, offline: bool = Fals
     request = urllib.request.Request(
         url, headers={"User-Agent": "devcontainer-blueprints-wolfi/1"}
     )
+    opener = urllib.request.build_opener(HTTPSRedirectHandler())
     last_error: Exception | None = None
     try:
         for attempt in range(5):
             try:
-                with urllib.request.urlopen(request, timeout=120) as response:
+                with opener.open(request, timeout=120) as response:
                     final_url = response.geturl()
                     if not final_url.startswith("https://"):
                         raise SystemExit(
@@ -94,6 +107,10 @@ def fetch(url: object, destination: Path, expected: str, *, offline: bool = Fals
                 os.replace(temporary, destination)
                 return
             except (OSError, urllib.error.URLError) as error:
+                if isinstance(error, urllib.error.HTTPError) and error.code not in (
+                    408, 429, 500, 502, 503, 504,
+                ):
+                    raise SystemExit(f"ERROR: download rejected: {url}: {error}") from error
                 last_error = error
                 if attempt + 1 < 5:
                     time.sleep(min(2 ** attempt, 8))
@@ -218,6 +235,26 @@ def main() -> None:
             validate_hash(rust.get("sha256"), "Rust SHA256"),
             "Rust archive",
         )
+
+    for component in ("kaniko", "playwright"):
+        record = resolved.get(component)
+        selected = lock.get("config", {}).get(component)
+        if (record is None) != (selected is None):
+            raise SystemExit(f"ERROR: {component} selection differs from its artifact record")
+        if record is None:
+            continue
+        if record.get("version") != selected["version"] or record.get("platform") != lock["image"]["platform"]:
+            raise SystemExit(f"ERROR: {component} artifact version/platform differs from configuration")
+        prefix = f"{lock['config']['artifacts']['root']}/{lock['image']['platform'].replace('/', '-')}/vendor/{component}/"
+        if component == "kaniko":
+            files = [record["archive"], record["signature"], *record["sources"]]
+            if any(not item["file"].startswith(prefix) for item in files):
+                raise SystemExit("ERROR: Kaniko file lies outside selected profile")
+            from kaniko_supply import prefetch_kaniko
+            prefetch_kaniko(record, repo_root, offline=args.offline)
+        else:
+            from playwright_supply import prefetch
+            prefetch(record, repo_root, fetch, offline=args.offline, config=lock["config"])
 
     print("Verified all frozen Wolfi vendor artifacts.")
 

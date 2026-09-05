@@ -47,5 +47,14 @@ case "$component" in
       --toolchain "$(read_lock '.resolved.rust.toolchain')" --target-triple "$(read_lock '.resolved.rust.targetTriple')" \
       --components "$(read_lock '.resolved.rust.components | join(" ")')"
     install -d -o "$user" -g "$(id -gn "$user")" -m 0755 "$user_home/.cargo" ;;
+  kaniko)
+    archive="$(vendor_path "$(read_lock '.resolved.kaniko.archive.file')")"
+    /bin/bash /mnt/components/kaniko/install.sh --archive "$archive" \
+      --sha256 "$(read_lock '.resolved.kaniko.archive.sha256')" --version "$(read_lock '.resolved.kaniko.version')" ;;
+  playwright)
+    archive="$(vendor_path "$(read_lock '.resolved.playwright.archive.file')")"
+    /bin/bash /mnt/components/playwright/install.sh --artifact-root /mnt/vendor \
+      --archive-relative "${archive#/mnt/vendor/}" --archive-sha256 "$(read_lock '.resolved.playwright.archive.sha256')" \
+      --version "$(read_lock '.resolved.playwright.version')" --platform "$(read_lock '.image.platform')" ;;
   *) echo "ERROR: Unknown vendor component: $component" >&2; exit 2 ;;
 esac

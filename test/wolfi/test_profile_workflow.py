@@ -133,6 +133,109 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(str(self.apk.relative_to(self.repo)), names)
         self.assertFalse(any("private" in name or "trivy-cache" in name for name in names))
 
+    def select_optional_vendor_fixtures(self):
+        """Represent every transferred file shape from both optional vendors."""
+        records = []
+
+        def artifact(relative, **metadata):
+            path = self.root / "linux-amd64/vendor" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"locked {relative} fixture".encode())
+            record = {"file": str(path.relative_to(self.repo)),
+                      "sha256": w.sha256(path), "size": path.stat().st_size,
+                      **metadata}
+            records.append(record)
+            return record
+
+        self.lock["config"]["kaniko"] = {"version": "1.28.4"}
+        self.lock["resolved"]["kaniko"] = {
+            "version": "1.28.4", "platform": "linux/amd64",
+            "archive": artifact("kaniko/kaniko.tar.gz"),
+            "signature": artifact("kaniko/signature-verification.json"),
+            "sources": [artifact(f"kaniko/source/{kind}", kind=kind)
+                        for kind in ("index", "manifest", "config", "layer")],
+        }
+        self.lock["config"]["playwright"] = {"version": "1.63.0"}
+        self.lock["config"]["build"] = {"node": "24", "npm": "12"}
+        self.lock["resolved"]["playwright"] = {
+            "version": "1.63.0", "platform": "linux/amd64",
+            "archive": artifact("playwright/browsers.tar.gz"),
+            "testRunner": artifact("playwright/test-runner.tar.gz"),
+            "packages": [artifact(f"playwright/npm/{filename}.tgz", name=name)
+                         for filename, name in (("test", "@playwright/test"),
+                                                ("playwright", "playwright"),
+                                                ("core", "playwright-core"))],
+            "browsers": [artifact(f"playwright/downloads/{name}.zip", name=name)
+                         for name in ("chromium", "chromium-headless-shell")],
+        }
+        self.refresh_profile()
+        return records
+
+    def test_optional_vendor_bundle_contains_every_locked_file_and_loads(self):
+        records = self.select_optional_vendor_fixtures()
+        self.package()
+        manifest = w.read_json(self.manifest())
+        bundle = self.repo / "artifacts-wolfi-ci-linux-amd64.tar.gz"
+        with tarfile.open(bundle) as archive:
+            for record in records:
+                with self.subTest(file=record["file"]):
+                    self.assertEqual(manifest["files"][record["file"]], record["sha256"])
+                    data = archive.extractfile(record["file"]).read()
+                    self.assertEqual(hashlib.sha256(data).hexdigest(), record["sha256"])
+        with patch.object(self.profile, "verify"), patch.object(self.profile, "inspect", side_effect=self.inspect), patch.object(w, "run", side_effect=self.docker) as docker:
+            w.load(self.profile, self.args)
+        self.assertEqual([call.args[:2] for call in docker.call_args_list],
+                         [("docker", "load"), ("docker", "load")])
+
+    def test_optional_vendor_load_rejects_each_omitted_manifest_entry_before_docker(self):
+        records = self.select_optional_vendor_fixtures()
+        self.package()
+        original = w.read_json(self.manifest())
+        for record in records:
+            manifest = copy.deepcopy(original)
+            del manifest["files"][record["file"]]
+            w.write_json(self.manifest(), manifest)
+            with self.subTest(file=record["file"]), patch.object(self.profile, "verify"), patch.object(w, "run") as docker:
+                with self.assertRaisesRegex(w.WorkflowError, "omits or alters"):
+                    w.load(self.profile, self.args)
+                docker.assert_not_called()
+
+    def test_optional_vendor_load_rejects_tampered_bytes_before_docker(self):
+        records = self.select_optional_vendor_fixtures()
+        self.package()
+        for record in records:
+            path = self.repo / record["file"]
+            original = path.read_bytes()
+            path.write_bytes(original + b"tampered")
+            with self.subTest(file=record["file"]), patch.object(self.profile, "verify"), patch.object(w, "run") as docker:
+                with self.assertRaisesRegex(w.WorkflowError, "changed"):
+                    w.load(self.profile, self.args)
+                docker.assert_not_called()
+            path.write_bytes(original)
+
+    def test_optional_vendor_load_rejects_cross_profile_records_before_docker(self):
+        self.select_optional_vendor_fixtures()
+        selected = [self.lock["resolved"]["kaniko"]["sources"][0],
+                    self.lock["resolved"]["playwright"]["browsers"][0]]
+        for record in selected:
+            self.package()
+            manifest = w.read_json(self.manifest())
+            original_file = record["file"]
+            other = self.repo / "artifacts/wolfi/dev/foreign-vendor"
+            other.parent.mkdir(parents=True, exist_ok=True)
+            other.write_bytes((self.repo / original_file).read_bytes())
+            record["file"] = str(other.relative_to(self.repo))
+            self.refresh_profile()
+            manifest["lockSha256"] = self.profile.digest
+            manifest["files"][str(self.lock_path.relative_to(self.repo))] = w.sha256(self.lock_path)
+            w.write_json(self.manifest(), manifest)
+            with self.subTest(file=original_file), patch.object(self.profile, "verify"), patch.object(w, "run") as docker:
+                with self.assertRaisesRegex(w.WorkflowError, "outside this profile"):
+                    w.load(self.profile, self.args)
+                docker.assert_not_called()
+            record["file"] = original_file
+            self.refresh_profile()
+
     def test_package_rejects_changed_locked_artifact_before_docker(self):
         self.apk.write_text("changed")
         with patch.object(self.profile, "verify"), patch.object(w, "run") as docker:
@@ -420,7 +523,7 @@ class OfflineLockTests(unittest.TestCase):
         lock["config"]["vscode"]["extensions"] = []
         del lock["resolved"]["extensions"]
         for key in ("kubectl", "rust"):
-            del lock["config"]["toolchain"][key]
+            del lock["config"]["build" if key == "rust" else "utilities"][key]
             del lock["resolved"][key]
         self.config.write_text(json.dumps(lock["config"]))
         lock["source"]["fileSha256"] = w.sha256(self.config)
@@ -449,7 +552,7 @@ class OfflineLockTests(unittest.TestCase):
                     elif key == "extensions":
                         lock["config"]["vscode"]["extensions"] = []
                     else:
-                        del lock["config"]["toolchain"][key]
+                        del lock["config"]["build" if key == "rust" else "utilities"][key]
                     lock["resolved"][key] = value
                     self.reject(lock)
 

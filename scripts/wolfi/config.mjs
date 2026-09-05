@@ -249,87 +249,64 @@ function uniqueArrayAt(value, location, validateItem, { minItems = 0, maxItems =
   });
 }
 
-function normalizeToolchain(value) {
-  const toolchain = recordAt(value, "toolchain", [], [
-    "build",
-    "python",
-    "java",
-    "maven",
-    "node",
-    "npm",
-    "clamav",
-    "kubectl",
-    "yq",
-    "helm",
-    "oras",
-    "mongosh",
-    "mongodbDatabaseTools",
-    "rust"
-  ]);
+export const UTILITY_CATALOG = JSON.parse(fs.readFileSync(new URL("../../src/wolfi/components/utilities/catalog.json", import.meta.url), "utf8"));
+export const PLAYWRIGHT_VERSION = "1.63.0";
+
+function normalizeBuild(value) {
+  const build = recordAt(value, "build", [], ["native", "python", "java", "maven", "node", "npm", "rust"]);
   const normalized = {};
-
-  if (hasOwn(toolchain, "build")) {
-    const build = recordAt(toolchain.build, "toolchain.build", [], ["clang"]);
-    normalized.build = hasOwn(build, "clang")
-      ? { clang: selectorAt(build.clang, "toolchain.build.clang") }
-      : {};
+  if (hasOwn(build, "native")) {
+    const native = recordAt(build.native, "build.native", [], ["clang"]);
+    normalized.native = hasOwn(native, "clang") ? { clang: selectorAt(native.clang, "build.native.clang") } : {};
   }
-  if (hasOwn(toolchain, "python")) {
-    normalized.python = uniqueArrayAt(toolchain.python, "toolchain.python", selectorAt, { minItems: 1, maxItems: 8 });
+  if (hasOwn(build, "python")) {
+    normalized.python = uniqueArrayAt(build.python, "build.python", selectorAt, { minItems: 1, maxItems: 8 });
   }
-
-  for (const key of [
-    "java",
-    "maven",
-    "node",
-    "npm",
-    "clamav",
-    "kubectl",
-    "yq",
-    "helm",
-    "oras",
-    "mongosh",
-    "mongodbDatabaseTools"
-  ]) {
-    if (hasOwn(toolchain, key)) {
-      normalized[key] = selectorAt(toolchain[key], `toolchain.${key}`);
+  for (const key of ["java", "maven", "node", "npm"]) {
+    if (hasOwn(build, key)) normalized[key] = selectorAt(build[key], `build.${key}`);
+  }
+  if (hasOwn(build, "maven") && !hasOwn(build, "java")) configError("build.maven", "requires build.java");
+  if (hasOwn(build, "npm") && !hasOwn(build, "node")) configError("build.npm", "requires build.node");
+  if (hasOwn(build, "rust")) {
+    const rust = recordAt(build.rust, "build.rust", ["toolchain", "components"]);
+    const toolchain = selectorAt(rust.toolchain, "build.rust.toolchain");
+    if (!/^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(toolchain)) {
+      configError("build.rust.toolchain", "must be a dated nightly: nightly-YYYY-MM-DD");
     }
-  }
-
-  if (hasOwn(toolchain, "maven") && !hasOwn(toolchain, "java")) {
-    configError("toolchain.maven", "requires toolchain.java");
-  }
-  if (hasOwn(toolchain, "npm") && !hasOwn(toolchain, "node")) {
-    configError("toolchain.npm", "requires toolchain.node");
-  }
-
-  if (hasOwn(toolchain, "rust")) {
-    const rust = recordAt(toolchain.rust, "toolchain.rust", ["toolchain", "components"]);
-    const rustToolchain = selectorAt(rust.toolchain, "toolchain.rust.toolchain");
-    if (!/^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(rustToolchain)) {
-      configError("toolchain.rust.toolchain", "must be a dated nightly: nightly-YYYY-MM-DD");
-    }
-    const allowedComponents = new Set(["rust-src", "rust-analyzer", "rustfmt", "clippy"]);
-    const components = uniqueArrayAt(rust.components, "toolchain.rust.components", selectorAt, {
-      maxItems: allowedComponents.size
-    });
+    const allowed = new Set(["rust-src", "rust-analyzer", "rustfmt", "clippy"]);
+    const components = uniqueArrayAt(rust.components, "build.rust.components", selectorAt, { maxItems: allowed.size });
     for (const component of components) {
-      if (!allowedComponents.has(component)) {
-        configError("toolchain.rust.components", `unsupported component: ${component}`);
-      }
+      if (!allowed.has(component)) configError("build.rust.components", `unsupported component: ${component}`);
     }
-    normalized.rust = {
-      toolchain: rustToolchain,
-      components
-    };
+    normalized.rust = { toolchain, components };
   }
-
   return normalized;
 }
 
+function normalizeUtilities(value) {
+  const selected = recordAt(value, "utilities", [], Object.keys(UTILITY_CATALOG));
+  return Object.fromEntries(Object.entries(selected).map(([key, value]) => {
+    const selector = selectorAt(value, `utilities.${key}`);
+    const utility = UTILITY_CATALOG[key];
+    if (selector === "latest" && utility.packages.some(p => p.nameTemplate)) {
+      configError(`utilities.${key}`, `requires a package line such as "${utility.exampleSelector}"; latest is not a package line`);
+    }
+    return [key, selector];
+  }));
+}
+
+function exactVersionAt(value, location) {
+  const version = selectorAt(value, location);
+  if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) configError(location, "requires an exact major.minor.patch version");
+  return version;
+}
+
 export function validateWolfiConfig(value) {
+  if (value && Object.hasOwn(value, "toolchain")) {
+    configError("toolchain", "migrate compiler/language entries to build (build becomes native) and CLI entries to utilities; regenerate the lock with update-lock");
+  }
   const root = recordAt(value, "config", ["schemaVersion", "image", "artifacts", "wolfi"], [
-    "user", "devcontainer", "docker", "vscode", "toolchain"
+    "user", "devcontainer", "docker", "vscode", "build", "utilities", "kaniko", "playwright"
   ]);
   if (root.schemaVersion !== 2) {
     configError("schemaVersion", "must be the integer 2; migrate legacy image roles to one image.reference");
@@ -361,8 +338,18 @@ export function validateWolfiConfig(value) {
       }
     },
     devcontainer,
-    toolchain: normalizeToolchain(hasOwn(root, "toolchain") ? root.toolchain : {})
+    build: normalizeBuild(hasOwn(root, "build") ? root.build : {}),
+    utilities: normalizeUtilities(hasOwn(root, "utilities") ? root.utilities : {})
   };
+  if (hasOwn(root, "kaniko")) {
+    const kaniko = recordAt(root.kaniko, "kaniko", ["version"]);
+    normalized.kaniko = { version: exactVersionAt(kaniko.version, "kaniko.version") };
+  }
+  if (hasOwn(root, "playwright") && root.playwright !== false) {
+    const playwright = root.playwright === true ? { version: PLAYWRIGHT_VERSION } : recordAt(root.playwright, "playwright", ["version"]);
+    normalized.playwright = { version: exactVersionAt(playwright.version, "playwright.version") };
+    if (!normalized.build.node || !normalized.build.npm) configError("playwright", "requires build.node and build.npm");
+  }
   if (hasOwn(root, "user")) {
     const user = recordAt(root.user, "user", ["name", "uid", "gid"]);
     const name = stringAt(user.name, "user.name", { maxLength: 32 });
@@ -407,8 +394,8 @@ export function validateWolfiConfig(value) {
       })
     };
     if (normalized.vscode.extensions.some((id) => id.toLowerCase() === "rust-lang.rust-analyzer")
-        && !normalized.toolchain.rust?.components.includes("rust-analyzer")) {
-      configError("vscode.extensions", "rust-lang.rust-analyzer requires toolchain.rust.components to include rust-analyzer for offline activation");
+        && !normalized.build.rust?.components.includes("rust-analyzer")) {
+      configError("vscode.extensions", "rust-lang.rust-analyzer requires build.rust.components to include rust-analyzer for offline activation");
     }
   }
   return normalized;
@@ -583,12 +570,14 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true, require
     configError("lock.resolver.stages", "must include the oci-base-image resolver");
   }
 
-  recordAt(lock.resolved, "lock.resolved", requireBaseImage ? ["baseImage"] : [], ["baseImage", "apk", "vscode", "extensions", "kubectl", "rust", "tools"]);
+  recordAt(lock.resolved, "lock.resolved", requireBaseImage ? ["baseImage"] : [], ["baseImage", "apk", "vscode", "extensions", "kubectl", "rust", "tools", "kaniko", "playwright"]);
   const selectedVendor = {
     vscode: hasOwn(config, "vscode"),
     extensions: (config.vscode?.extensions.length ?? 0) > 0,
-    kubectl: hasOwn(config.toolchain, "kubectl"),
-    rust: hasOwn(config.toolchain, "rust")
+    kubectl: hasOwn(config.utilities, "kubectl"),
+    rust: hasOwn(config.build, "rust"),
+    kaniko: hasOwn(config, "kaniko"),
+    playwright: hasOwn(config, "playwright")
   };
   for (const [name, selected] of Object.entries(selectedVendor)) {
     if (!selected && hasOwn(lock.resolved, name)) {
@@ -629,6 +618,16 @@ export function verifyWolfiLock(config, lock, { requireBaseImage = true, require
       const artifact = lock.resolved[name];
       if (artifact == null || typeof artifact !== "object" || Array.isArray(artifact) || Object.keys(artifact).length === 0) {
         configError(`lock.resolved.${name}`, "must contain the artifact mapping selected by the configuration");
+      }
+      if (["kaniko", "playwright"].includes(name)) {
+        if (artifact.version !== config[name].version || artifact.platform !== config.image.platform) {
+          configError(`lock.resolved.${name}`, "version/platform differs from the configuration");
+        }
+        const archive = recordAt(artifact.archive, `lock.resolved.${name}.archive`, ["file", "sha256", "size"]);
+        relativeArtifactPathAt(archive.file, `lock.resolved.${name}.archive.file`);
+        if (!SHA256_PATTERN.test(archive.sha256) || !Number.isSafeInteger(archive.size) || archive.size <= 0) {
+          configError(`lock.resolved.${name}.archive`, "requires a SHA256 and positive size");
+        }
       }
     }
     const apk = lock.resolved.apk;

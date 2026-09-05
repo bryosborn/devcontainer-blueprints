@@ -1,0 +1,51 @@
+#!/bin/bash
+# Run only in a disposable CI container: Kaniko temporarily replaces its rootfs.
+set -Eeuo pipefail
+error() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
+[[ "$(id -u)" == 0 ]] || error 'kaniko-build requires UID 0 in a disposable container.'
+context=''
+args=()
+while (( $# )); do
+  case "$1" in
+    --pre-cleanup|--pre-cleanup=*|--preserve-context|--preserve-context=*|--cleanup|--cleanup=*|--kaniko-dir|--kaniko-dir=*|--force|--force=*)
+      error "kaniko-build controls its filesystem integration mode; remove $1." ;;
+    --context-sub-path|--context-sub-path=*)
+      error 'Kaniko ignores --context-sub-path for local contexts. Select the desired directory directly with --context DIRECTORY.' ;;
+    --context|-c)
+      [[ $# -ge 2 && -n "$2" && -z "$context" ]] || error 'Provide exactly one --context DIRECTORY.'
+      context="$2"; shift 2 ;;
+    --context=*)
+      [[ -z "$context" ]] || error 'Provide exactly one --context DIRECTORY.'
+      context="${1#*=}"; shift ;;
+    -c?*) error 'Use --context DIRECTORY instead of an attached -c argument.' ;;
+    --) error 'End-of-options syntax is not supported; use explicit build flags.' ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+[[ -n "$context" ]] || error 'Provide --context DIRECTORY on a mounted workspace or below /kaniko.'
+context="${context#dir://}"
+[[ "$context" != *://* && -d "$context" ]] || error 'The build context must be an existing local directory.'
+context="$(realpath -e -- "$context")"
+case "$context" in
+  /kaniko/*) ;;
+  *)
+    # mountinfo field 5 is the decoded mount path. The container root mount
+    # cannot protect a directory from Kaniko pre-cleanup.
+    awk -v context="$context" '
+      {
+        mount = $5
+        gsub(/\\040/, " ", mount); gsub(/\\011/, "\t", mount); gsub(/\\134/, "\\", mount)
+        if (mount != "/" && (context == mount || index(context, mount "/") == 1)) safe = 1
+      }
+      END { exit !safe }
+    ' /proc/self/mountinfo || error 'Context would be removed by pre-cleanup. Mount the workspace or stage it below /kaniko/context.'
+    ;;
+esac
+[[ -x /kaniko/executor && -x /kaniko/tini ]] || error 'The locked Kaniko payload is missing.'
+export KANIKO_DIR=/kaniko
+export DOCKER_CONFIG=/kaniko/.docker
+export SSL_CERT_DIR=/kaniko/ssl/certs
+export SSL_CERT_FILE=/kaniko/ssl/certs/ca-certificates.crt
+export FF_KANIKO_RUN_VIA_TINI=1
+exec /kaniko/executor --pre-cleanup=true --preserve-context=true --cleanup=true \
+  --context "$context" "${args[@]}"

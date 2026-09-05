@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wolfi browser check</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #edf3f8; color: #15263a; font-family: 'Liberation Sans', sans-serif; }
+    main { max-width: 1080px; margin: auto; padding: 40px 24px; }
+    header { background: #122e47; color: white; border-radius: 18px; padding: 32px; }
+    .eyebrow { color: #8bd6ea; font-size: 14px; letter-spacing: .12em; font-weight: bold; }
+    h1 { font-size: 38px; margin: 12px 0; }
+    header p { margin: 0; color: #dbe7ef; line-height: 1.6; }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 24px 0; }
+    article, form { background: white; border: 1px solid #dce6ee; border-radius: 14px; padding: 24px; }
+    article { border-top: 5px solid #287bb8; }
+    article:nth-child(2) { border-top-color: #e68b3b; }
+    article:nth-child(3) { border-top-color: #32a17a; }
+    h2 { font-size: 19px; margin: 0 0 18px; }
+    img { width: 100%; height: 122px; object-fit: contain; }
+    .cjk { font-family: 'Noto Sans CJK SC', sans-serif; font-size: 20px; line-height: 1.8; }
+    .thai { font-family: 'Noto Sans Thai', sans-serif; font-size: 21px; line-height: 1.8; }
+    .emoji { font-family: 'Noto Color Emoji', sans-serif; font-size: 32px; }
+    .fine { color: #53697e; font-size: 14px; line-height: 1.5; }
+    label { display: block; font-weight: bold; margin-bottom: 10px; }
+    .controls { display: flex; gap: 12px; }
+    input { flex: 1; min-width: 0; border: 1px solid #a6b9c8; border-radius: 8px; padding: 13px; font: inherit; }
+    button { background: #166d99; color: white; border: 0; border-radius: 8px; padding: 14px 22px; font: inherit; font-weight: bold; cursor: pointer; }
+    [role=status] { margin: 18px 0 0; padding: 14px; border-radius: 8px; color: #145d46; background: #def3e9; line-height: 1.6; }
+    footer { color: #617387; margin-top: 20px; font-size: 13px; }
+    @media (max-width: 700px) {
+      main { padding: 20px 16px; }
+      header { padding: 24px; }
+      h1 { font-size: 29px; }
+      .cards { grid-template-columns: 1fr; }
+      .controls { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">WOLFI · PLAYWRIGHT · LOCAL FIXTURE</div>
+    <h1>Wolfi browser check</h1>
+    <p>Real browser rendering, local assets, readable fonts and a working interaction.</p>
+  </header>
+  <section class="cards">
+    <article data-card>
+      <h2>Local artwork</h2>
+      <img src="/artwork.svg" alt="Local illustration with a blue circle, orange square and green triangle">
+      <p class="fine">Three distinct shapes, loaded from this container.</p>
+    </article>
+    <article data-card>
+      <h2>Multilingual text</h2>
+      <div class="cjk">浏览器测试 / ブラウザ</div>
+      <div class="thai">ทดสอบเบราว์เซอร์</div>
+      <p class="fine">Glyphs should render clearly, without empty boxes.</p>
+    </article>
+    <article data-card>
+      <h2>Color and emoji</h2>
+      <div class="emoji">🌍 🚀 ✅</div>
+      <p class="fine">Blue, orange and green cards with consistent spacing.</p>
+    </article>
+  </section>
+  <form>
+    <label for="name">Your name</label>
+    <div class="controls"><input id="name" name="name" required><button>Run local check</button></div>
+    <p role="status">Enter a name and run the check.</p>
+  </form>
+  <footer>No external requests · Desktop and mobile layouts · Screenshots and traces</footer>
+</main>
+<script>
+  document.querySelector('form').addEventListener('submit', event => {
+    event.preventDefault();
+    document.querySelector('[role=status]').textContent = `Ready, ${document.querySelector('#name').value}! All assets are local.`;
+  });
+</script>
+</body>
+</html>

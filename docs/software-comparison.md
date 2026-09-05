@@ -3,13 +3,14 @@
 Snapshot: **2026-09-05**, `linux/amd64`. The Ubuntu column describes the previous
 **default final image** `devcontainers/base-toolchain:0.2.0`. The Wolfi column
 describes the current `devcontainers/wolfi-ci:0.1.0` and `devcontainers/wolfi-dev:0.1.0` images.
-“Both” means installed in both Wolfi images; “dev only” means absent from CI.
+“Both” means installed in both Wolfi images; “dev only” and “CI only” identify
+software installed in just that profile.
 
 This inventory covers every installed OS package, the separately installed main
 tools, and every extension recorded in the delivered VSIX archives. It excludes
-the repository bootstrap, the disposable Ubuntu all-tools comparator, and the
-separate GitLab Kaniko job. Libraries bundled inside applications or uninstalled
-VSIX files are not individually expanded into additional rows.
+the repository bootstrap and the disposable Ubuntu all-tools comparator.
+Libraries bundled inside applications or uninstalled VSIX files are not
+individually expanded into additional rows.
 
 Jump to [main software](#main-software), [all OS packages](#all-os-packages),
 [VS Code extensions](#vs-code-extensions), or [snapshot sources](#snapshot-sources).
@@ -72,37 +73,42 @@ suffixes and dependency packages appear in the complete OS inventory below.
 | **Docker Compose** — 5.5.1 | **Docker Compose** — 5.5.1; dev only |
 | **Docker socket integration** — Docker-outside-of-Docker Feature | **Docker socket integration** — Package-free socket proxy; dev only |
 | **Docker daemon** — Not installed | **Docker daemon** — Not installed in either output |
-| **Kaniko** — Not installed | **Kaniko** — Separate GitLab job; not installed in either output |
+| **Kaniko** — Not installed | **Kaniko** — 1.28.4; `kaniko-build` wrapper; CI only |
+| **Tini (Kaniko helper)** — Not installed | **Tini (Kaniko helper)** — 0.19.0; CI only |
+| **Playwright / Chromium** — Not installed by the Ubuntu workflow | **Playwright / Chromium** — Optional; disabled in both default profiles |
 | **VS Code Server** — 1.136.1; both server layouts | **VS Code Server** — 1.136.1; both server layouts; dev only |
 | **VS Code bundled Node.js** — 24.18.1 | **VS Code bundled Node.js** — 24.18.1; dev only |
 | **VSIX archive** — 28 server + 7 client extensions; uninstalled | **VSIX archive** — 28 server + 7 client extensions; uninstalled; dev only |
-| **curl** — 7.81.0 | **curl** — Command absent in both; libcurl is present as a dependency |
+| **curl** — 7.81.0 | **curl** — **CLI reports 8.22.0-DEV**; APK is `8.22.0-r0`; both |
 | **wget** — GNU Wget 1.21.2 | **wget** — Command absent in both |
-| **OpenSSH client** — 8.9p1 | **OpenSSH client** — Command absent in both |
+| **OpenSSH client** — 8.9p1 | **OpenSSH client** — 10.5p1; SSH/SCP/SFTP/agent and key generation/scanning; both |
 | **rsync** — 3.2.7 | **rsync** — Command absent in both |
-| **unzip** — Info-ZIP 6.00 | **unzip** — BusyBox 1.38.0 applet; both |
-| **zip** — Info-ZIP 3.0 | **zip** — Command absent in both |
+| **unzip** — Info-ZIP 6.00 | **unzip** — Info-ZIP 6.00; both |
+| **zip** — Info-ZIP 3.0 | **zip** — Info-ZIP 3.0; both |
 | **Zsh** — 5.8.1-1 | **Zsh** — Not installed in either output |
 | **nano** — 6.2-1ubuntu0.2 | **nano** — Not installed in either output |
 | **htop** — 3.0.5-7build2 | **htop** — Not installed in either output |
 | **strace** — 5.16-0ubuntu3 | **strace** — Not installed in either output |
 | **Oh My Zsh** — Present in `/home/vscode/.oh-my-zsh`; version not recorded | **Oh My Zsh** — Not installed in either output |
-| **less** — Provided by `less 590-1ubuntu0.22.04.3` | **less** — BusyBox 1.38.0 applet; both |
-| **ps** — Provided by `procps 2:3.3.17-6ubuntu2.1` | **ps** — BusyBox 1.38.0 applet; both |
+| **less** — Provided by `less 590-1ubuntu0.22.04.3` | **less** — 709; full standalone pager; both |
+| **ps** — Provided by `procps 2:3.3.17-6ubuntu2.1` | **ps** — procps-ng 4.0.7; both |
+| **GNU find / xargs** — Provided by `findutils 4.8.0-1ubuntu3` | **GNU find / xargs** — 4.11.0; both |
 | **lsof** — Provided by `lsof 4.93.2+dfsg-1.1build2` | **lsof** — BusyBox 1.38.0 applet; both |
 | **ffmpeg** — Not installed | **ffmpeg** — Not installed in either output |
 
-The `mongosh` package/executable version disagreement is an observed property of
-these images; the table preserves both values. It does not infer which value is
-authoritative for security assessment. See the [scan coverage notes](wolfi.md#observed-scans-on-2026-09-05).
+The `mongosh` package/executable version disagreement and curl’s `-DEV` CLI
+version are observed properties of these images; the table preserves the CLI and
+APK values. The curl executable also reports its release date as `[unreleased]`.
+The comparison does not infer which value is authoritative for security
+assessment. See the [scan coverage notes](wolfi.md#observed-scans-on-2026-09-05).
 
 Ubuntu has a newer Git executable under `/usr/local/bin` than its dpkg Git record.
 The tool row above reports the executable; the package row below reports dpkg.
 
 ## All OS packages
 
-Complete installed package inventory: **Ubuntu 494**, **Wolfi CI 137**,
-**Wolfi dev 149**. Every package record appears once in this section.
+Complete installed package inventory: **Ubuntu 494**, **Wolfi CI 148**,
+**Wolfi dev 160**. Every package record appears once in this section.
 Known related package names are paired even when the distributions name or split
 them differently. Pairing describes a component family, not identical files or ABI.
 A dash means no directly paired OS package; it does not establish that the software
@@ -143,7 +149,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | `coreutils` — `8.32-4.1ubuntu1.3` | `coreutils` — `9.11-r4`; both |
 | `cpp` — `4:11.2.0-1ubuntu1` | — |
 | `cpp-11` — `11.4.0-1ubuntu1~22.04.3` | — |
-| `curl` — `7.81.0-1ubuntu1.27` | — |
+| `curl` — `7.81.0-1ubuntu1.27` | `curl` — `8.22.0-r0`; both |
 | — | `cyrus-sasl-heimdal-libs` — `2.1.28-r55`; both |
 | `dash` — `0.5.11+git20210903+057cd650a4ed-3build1` | — |
 | `dbus` — `1.12.20-2ubuntu4.1` | — |
@@ -165,7 +171,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | `dpkg-dev` — `1.21.1ubuntu2.6` | — |
 | `e2fsprogs` — `1.46.5-2ubuntu1.2` | — |
 | `emacsen-common` — `3.0.4` | — |
-| `findutils` — `4.8.0-1ubuntu3` | — |
+| `findutils` — `4.8.0-1ubuntu3` | `findutils` — `4.11.0-r2`; both |
 | `fontconfig` — `2.13.1-4.2ubuntu5` | — |
 | `fontconfig-config` — `2.13.1-4.2ubuntu5` | — |
 | `fonts-ipafont-gothic` — `00303-21ubuntu1` | — |
@@ -223,7 +229,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | — | `krb5-conf` — `1.0-r9`; both |
 | — | `krb5-libs` — `1.22.2-r3`; both |
 | — | `ld-linux-2.44` — `2.44-r5`; both |
-| `less` — `590-1ubuntu0.22.04.3` | — |
+| `less` — `590-1ubuntu0.22.04.3` | `less` — `709-r1`; both |
 | `lib32gcc-s1` — `12.3.0-1ubuntu1~22.04.3` | — |
 | `lib32stdc++6` — `12.3.0-1ubuntu1~22.04.3` | — |
 | `libacl1:amd64` — `2.3.1-1` | `libacl1` — `2.4.0-r3`; both |
@@ -303,7 +309,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | `libdrm-nouveau2:amd64` — `2.4.113-2~ubuntu0.22.04.1` | — |
 | `libdrm-radeon1:amd64` — `2.4.113-2~ubuntu0.22.04.1` | — |
 | `libdrm2:amd64` — `2.4.113-2~ubuntu0.22.04.1` | — |
-| `libedit2:amd64` — `3.1-20210910-1build1` | — |
+| `libedit2:amd64` — `3.1-20210910-1build1` | `libedit` — `3.1-r19`; both |
 | `libegl-mesa0:amd64` — `23.2.1-1ubuntu3.1~22.04.4` | — |
 | `libegl1:amd64` — `1.4.0-1` | — |
 | `libelf1:amd64` — `0.186-1ubuntu0.1` | — |
@@ -432,7 +438,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | `libpixman-1-0:amd64` — `0.40.0-1ubuntu0.22.04.1` | — |
 | `libpng16-16:amd64` — `1.6.37-3ubuntu0.6` | `libpng` — `1.6.58-r3`; both |
 | `libpopt0:amd64` — `1.18-3build1` | — |
-| `libprocps8:amd64` — `2:3.3.17-6ubuntu2.1` | — |
+| `libprocps8:amd64` — `2:3.3.17-6ubuntu2.1` | `libproc-2-0` — `4.0.7-r1`; both |
 | `libpsl5:amd64` — `0.21.0-1.2build2` | `libpsl` — `0.23.3-r1`; both |
 | `libpython3-stdlib:amd64` — `3.10.6-1~22.04.1` | — |
 | `libpython3.10-minimal:amd64` — `3.10.12-1~22.04.17` | — |
@@ -582,7 +588,9 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | — | `openjdk-26` — `26.0.2.1-r2`; both |
 | — | `openjdk-26-default-jdk` — `26.0.2.1-r2`; both |
 | — | `openssf-compiler-options` — `20250904-r9`; both |
-| `openssh-client` — `1:8.9p1-3ubuntu0.17` | — |
+| `openssh-client` — `1:8.9p1-3ubuntu0.17` | `openssh-client` — `10.5_p1-r1`; both |
+| — | `openssh-keygen` — `10.5_p1-r1`; both |
+| — | `openssh-keyscan` — `10.5_p1-r1`; both |
 | `openssl` — `3.0.2-0ubuntu1.29` | `openssl` — `3.6.4-r4`; both |
 | — | `oras` — `1.3.4-r0`; both |
 | — | `p11-kit-trust` — `0.26.5-r1`; both |
@@ -596,7 +604,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | — | `posix-cc-wrappers` — `2-r10`; both |
 | — | `posix-libc-utils-2.44` — `2.44-r5`; both |
 | — | `posix-libc-utils-bin-2.44` — `2.44-r5`; both |
-| `procps` — `2:3.3.17-6ubuntu2.1` | — |
+| `procps` — `2:3.3.17-6ubuntu2.1` | `procps` — `4.0.7-r1`; both |
 | `psmisc` — `23.4-2build3` | — |
 | — | `py3-pip-wheel` — `26.2.1-r1`; both |
 | — | `py3.12-pip-base` — `26.2.1-r1`; both |
@@ -638,7 +646,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | `ubuntu-keyring` — `2021.03.26` | — |
 | `ubuntu-mono` — `20.10-0ubuntu2` | — |
 | `ucf` — `3.0043` | — |
-| `unzip` — `6.0-26ubuntu3.2` | — |
+| `unzip` — `6.0-26ubuntu3.2` | `unzip` — `6.0-r8`; both |
 | `usrmerge` — `25ubuntu2` | — |
 | `util-linux` — `2.37.2-4ubuntu3.5` | — |
 | `vim-common` — `2:8.2.3995-1ubuntu2.36` | — |
@@ -660,7 +668,7 @@ is absent, because vendor installs and BusyBox applets are covered above.
 | `xxd` — `2:8.2.3995-1ubuntu2.36` | — |
 | `xz-utils` — `5.2.5-2ubuntu1.1` | `xz` — `5.8.3-r3`; both |
 | — | `yq` — `4.53.6-r2`; both |
-| `zip` — `3.0-12build2` | — |
+| `zip` — `3.0-12build2` | `zip` — `3.0-r11`; both |
 | `zlib1g:amd64` — `1:1.2.11.dfsg-2ubuntu9.2` | `zlib` — `1.3.2-r5`; both |
 | `zlib1g-dev:amd64` — `1:1.2.11.dfsg-2ubuntu9.2` | — |
 | `zsh` — `5.8.1-1` | — |
@@ -717,13 +725,13 @@ records are also listed below; they are part of VS Code, not downloaded VSIX fil
 
 Installed OS records were read from `dpkg-query` in Ubuntu and
 `/lib/apk/db/installed` in Wolfi, using disposable containers with networking
-disabled. Wolfi package name/version inventories matched their committed locks.
+disabled. Wolfi package name/version inventories matched their profile locks.
 Tool versions were queried inside those images; extension versions came from
 the archived Ubuntu extension lock and the locked Wolfi extension payload.
 
 - Ubuntu image: `sha256:c938c9a009d005fe6b0e38671f61da7a2abe335ef0e57fbf2a68b2dbc231e6ad`.
-- Wolfi CI image: `sha256:c927989b5475e3800bb4e4fe5cc8e32a989719744a19e6684d68cbe09daee51e`.
-- Wolfi dev image: `sha256:d56bab109c9f242f5838fdbe6a0cbfe8647980a6ac0fd0cd6695527813615632`.
+- Wolfi CI image: `sha256:0fca9c04e7be1d976db61fbf2cba789abdc4b9d6a85de6ebf5a0b8707c921caa`.
+- Wolfi dev image: `sha256:be269dd6a26578e899513749e57e614429ee9455e2c9616189509cf2f075116f`.
 - Current profiles and locks: [CI YAML](../config/wolfi-ci.yaml), [CI lock](../config/wolfi-ci.lock.json), [dev YAML](../config/wolfi-dev.yaml), [dev lock](../config/wolfi-dev.lock.json).
 - Removed Ubuntu configuration is retained in Git commit `2fb8bee24b348491b393f294b30b6c78b0e5b83b`: `config/docker.env`, `config/toolchain.env`, `src/apt-artifacts/apt-packages.txt`, and `config/vscode-extensions.txt`.
 - Finer-grained bundled dependency inventories are available in the [CI SBOM](../artifacts/wolfi/ci/linux-amd64/reports/scan/devcontainers_wolfi-ci_0.1.0.sbom.cdx.json) and [dev SBOM](../artifacts/wolfi/dev/linux-amd64/reports/scan/devcontainers_wolfi-dev_0.1.0.sbom.cdx.json). These local generated files are not committed.

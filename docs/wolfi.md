@@ -24,22 +24,36 @@ Configurations must use distinct, non-overlapping artifact roots and output tags
 | `docker.socket: true` | Requires CLI, named user and Dev Container metadata; enables socket runtime | No proxy, socket mount, or Docker host environment |
 | `vscode` | Required `version`; `quality` defaults to `stable`; the resolver locks its server commit | No server or extension payloads |
 | `vscode.extensions` | Resolve and archive selected extensions | No extension resolution/archive |
-| `toolchain` | Select individual versioned tools below | Empty toolchain |
+| `build` | Select compiler/language tools; `native` enables C/C++ basics | No compiler/language roots |
+| `utilities` | Select reviewed native packages and locked CLIs | No selected utility roots |
+| `kaniko` | Exact version; signed maintained executor and `kaniko-build` wrapper | No Kaniko payload or environment |
+| `playwright` | `true` or exact-version mapping; matched Chromium plus native prerequisites | No browser payload, fonts or browser environment |
 
 The common baseline contains Bash, certificates, core utilities, Git, grep,
 GNU tar/gzip, jq and libc utilities. Internal APK mappings remain in the source
 package catalog. Optional tools can still bring required transitive packages;
 omission removes that tool's package roots and component-specific payloads.
 
-Toolchain selections retain the existing shapes: `build` enables the native
-build tools, with optional `build.clang`; `python` is a version list; Java,
-Maven, Node, npm, ClamAV, kubectl, yq, Helm, ORAS, mongosh, and
-`mongodbDatabaseTools` take version selectors. Maven requires Java; npm requires
-Node. Rust requires `toolchain: nightly-YYYY-MM-DD` and a `components` list.
-Use `components: []` for the minimal Rust compiler/Cargo toolchain, or select
-`rust-src`, `rust-analyzer`, `rustfmt`, and `clippy` individually. Keep
-`rust-analyzer` selected when its VSIX is selected. Native mappings and version
-constraints are validated during resolution.
+`build.native` selects native compilation tools with optional `clang`;
+`build.python` is a version list. Java, Maven, Node and npm take literal version
+selectors; Maven requires Java and npm requires Node. `build.rust` requires
+`toolchain: nightly-YYYY-MM-DD` and a `components` list, which may be empty.
+Keep `rust-analyzer` when its VSIX is selected. Rust implicitly needs a native
+linker even when `native` is omitted.
+
+`utilities` accepts only the reviewed catalog keys shown in the YAML examples
+and editor completion. They map to signed Wolfi Main/Extra roots, except kubectl,
+which remains a locked upstream download. The SSH choices intentionally select
+client/key packages, without the SSH server. BusyBox applets may still exist
+when a full utility is omitted. Selectors are literal values or `latest`, not
+semver ranges: the resolver checks the selected signed package against the
+requested line/version and fails on a mismatch. It does not search old indexes.
+The JSON Schema is generated from the same utility catalog as runtime validation
+and APK mapping (`node scripts/wolfi/schema.mjs`); `npm test` checks it is current.
+
+The former top-level `toolchain` mapping is rejected with migration guidance.
+Move its language entries to `build`, rename nested `build` to `native`, and
+move CLI entries to `utilities`, then regenerate the companion lock.
 
 Both examples retain the same initial tool selections. Updating their locks
 independently can resolve rolling selectors at different times; review the
@@ -143,15 +157,97 @@ UID 0 with `privileged=false`. Runner admission policies, storage permissions,
 network policy, registry authentication, and application dependency caches
 remain deployment inputs.
 
-The [example pipeline](../examples/gitlab-ci.yml) compiles/tests in the CI image
-and passes build artifacts to a dedicated shell-capable Kaniko executor job.
-The existing pipeline owns its approved image/version, digest pin, scan gate,
-and credentials. Kaniko is not installed in these two outputs: its executor
-extracts build layers into its own filesystem and upstream does not support
-copying it into an arbitrary CI image. See the
-[maintained fork's limitations](https://github.com/chainguard-forks/kaniko#known-issues).
-Local manufacturing still uses Docker/BuildKit; no Dockerless image factory is
-introduced by this change.
+The [example pipeline](../examples/gitlab-ci.yml) passes compile/test artifacts
+to a separate disposable package job. Its two required, digest-validated inputs
+can select the same Kaniko-enabled CI image or an approved dedicated shell-capable
+Kaniko image. Registry credentials are supplied at job runtime.
+
+The optional `kaniko.version` selects [osscontainertools 1.28.4](https://github.com/osscontainertools/kaniko/releases/tag/v1.28.4).
+Resolution verifies its exact release-workflow Cosign identity, records the
+signed index and platform manifest digests, and retains signature evidence and
+artifact hashes. Installation extracts only executor, static tini and certificates;
+no credential helpers, Docker daemon or credentials are baked in. The connected
+bootstrap provides pinned Cosign 3 for signature verification.
+
+Use `kaniko-build` in the custom Wolfi image. It enforces
+`--pre-cleanup=true --preserve-context=true --cleanup=true` and requires UID 0.
+These [fork-specific flags](https://github.com/osscontainertools/kaniko/tree/v1.28.4#flag---pre-cleanup)
+allow custom-image execution by saving/restoring the filesystem. The build
+context must be mounted or staged under `/kaniko`; write results to a mounted
+output. Preservation is not an isolation boundary: abrupt termination or a
+failure before cleanup registration can leave the job filesystem replaced.
+Use a disposable container, never the attached development environment.
+Local image manufacturing remains Docker/BuildKit-based.
+
+## Playwright
+
+Both defaults comment out `playwright: true`. It selects the repository-maintained
+compatibility target 1.63.0; `{version: "1.63.0"}` pins it explicitly. The project
+must declare that exact `@playwright/test` version with frozen npm dependencies.
+The image installs browser/runtime prerequisites, not a competing global test runner.
+
+The resolver locks the official matching Chromium and headless-shell archives,
+revision, browser version, npm integrity, platform, licenses and hashes. It keeps
+AMD64 Chrome-for-Testing and ARM64 archive layouts. The cache is root-owned and
+readable by the configured/updated developer identity at `/opt/playwright/browsers`;
+only enabled images receive `PLAYWRIGHT_BROWSERS_PATH`. Native signed libraries,
+Liberation and focused Noto CJK/Thai/emoji fonts, and `xvfb-run` support headless
+and headed runs. No FFmpeg/video, broad Noto bundle, VNC or desktop service is
+included. `xvfb-run -a npx --no-install playwright test --headed` runs a headed
+fixture against a virtual display.
+
+Wolfi is outside [Playwright's official OS support](https://playwright.dev/docs/intro#system-requirements).
+We test this selected combination without APT, OS impersonation, shared-library
+symlink workarounds or host-validation bypasses. Upstream `install-deps` uses
+APT; do not run it in Wolfi or replace the matched browser with native Chromium.
+Root and the default Playwright launch configuration do not provide a Chromium
+sandbox; these fixtures are for trusted application testing, without privileged
+mode, additional capabilities or a Docker socket.
+
+Verification uses isolated CI/dev test profiles, locally served deterministic
+pages, DOM/interaction/error assertions, desktop/mobile PNGs and traces. A separate
+official VS Code client harness opens the fixture in a real Dev Containers remote
+extension host and launches its ordinary workspace task through the VS Code API.
+It retains task/editor logs and explicit completion evidence. Test Explorer is
+not part of this check. The implementing assistant reviews the original PNGs
+with image vision and records the review with their hashes. A passing command
+alone is insufficient visual evidence.
+
+The 2026-09-05 acceptance used Playwright 1.63.0 and Chromium 153.0.8010.12,
+revision 1243. The isolated AMD64 CI profile passed headless shell, full Chromium
+and headed Xvfb tests as root; an ARM64 profile passed the same three modes.
+The AMD64 dev profile passed all three modes as root, `vscode` (1000:1000),
+and the changed developer identity (2101:3201): 18 browser tests in total.
+The separate official VS Code 1.136.1 client with Dev Containers 0.468.0 opened
+the AMD64 dev fixture as `vscode` (1000:1000) and ran the real workspace task:
+two tests passed, with no failed, skipped or flaky tests. Client and target
+networking were disabled; the browser target had private 1 GiB shared memory
+and no Docker socket or privileged mode.
+
+Direct AI inspection of the original desktop/mobile PNGs confirmed the local
+blue/orange/green artwork, readable CJK/Thai text and colored emoji, responsive
+layout, and changed form response without missing assets or clipping. The
+[VS Code receipt](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/acceptance.json),
+[visual review](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/visual-review.json),
+[desktop screenshot](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/workspace/results/desktop.png)
+and [mobile screenshot](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/workspace/results/mobile.png)
+are retained locally with hashes and traces. These ignored artifacts are generated
+evidence; the [harness instructions](../test/wolfi/playwright-vscode/README.md)
+describe reproducing the check. Headed Xvfb logs retain nonfatal multimedia-key
+warnings; desktop logs retain offline Marketplace/DBus diagnostics. No application
+errors or remote-server permission failures occurred in the acceptance run.
+
+The isolated AMD64 Playwright images measured 1,648,795,189 bytes for CI and
+2,661,319,087 bytes for dev. The dev browser profile disables socket support for
+testing, so its size difference from the default dev image is not a pure browser
+addition. Their [CI scan](../artifacts/wolfi/playwright-ci/linux-amd64/reports/scan/report.md)
+and [dev scan](../artifacts/wolfi/playwright-dev/linux-amd64/reports/scan/report.md)
+added no findings to the default profiles' counts.
+
+Trivy may not identify advisories in a downloaded Chromium binary. Reports must
+retain browser identity and state this coverage limitation: zero raw findings
+does not prove browser advisory coverage. High/Critical raw findings fail the
+same gate as every other selected component.
 
 ## Scans and acceptance
 
@@ -165,6 +261,8 @@ configuration/ignore files, all severities, and unfixed findings. The scanner
 and database context are frozen during each scan. Reuse one verified cache with
 `--cache-dir DIR --skip-db-download` when comparing the CI/dev outputs at the
 same database revision.
+Run scans sequentially when sharing a cache; Trivy locks it exclusively. Separate
+cache directories with the same verified database bytes allow concurrent scans.
 
 The uninstalled VSIX transfer archive is excluded from the default installed
 image scan and recorded in its options. Use `--include-vsix-archive` for the
@@ -178,12 +276,28 @@ verified before publication. Build/test success alone is not CVE acceptance.
 
 ### Observed scans on 2026-09-05
 
-The AMD64 CI and dev examples each passed the configured High/Critical gate
-with Trivy 0.74.0 and the same frozen database, updated on 2026-09-04. Each
-reported zero High/Critical, one Medium, and one Low finding. Reports and exact
-database/image identities are retained under each profile's `reports/scan/`.
-These are scanner results for those inputs, not a claim of complete
-vulnerability coverage.
+The final AMD64 examples passed the raw High/Critical gate with Trivy 0.74.0
+and identical frozen vulnerability/Java databases updated on 2026-09-05.
+
+| Image | Size (Docker inspect bytes) | Critical | High | Medium | Low | Unscored |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| [CI report](../artifacts/wolfi/ci/linux-amd64/reports/scan/report.md) | 1,230,412,030 | 0 | 0 | 1 | 1 | 3 |
+| [Dev report](../artifacts/wolfi/dev/linux-amd64/reports/scan/report.md) | 2,243,248,944 | 0 | 0 | 1 | 1 | 0 |
+
+Raw JSON, CSV, CycloneDX SBOMs, exact image IDs, report hashes and scanner/database
+provenance are retained beside these reports. These are results for those inputs,
+not a claim of complete vulnerability coverage. Docker's reported image size can
+differ from its disk-usage display and from compressed transfer bundle size.
+
+Kaniko 1.28.4 adds three unscored findings against its embedded
+`golang.org/x/crypto v0.55.0`: `CVE-2026-56855`, `CVE-2026-78662`, and
+[GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932). The first two raw records
+report SSH deadlock issues fixed in v0.56.0; the third concerns the unmaintained
+OpenPGP package with no fixed version. Module presence does not establish symbol
+reachability, and reachability has not been proven here. All findings remain
+visible, without ignores. Version 1.28.4 was still the
+[latest published maintained release](https://github.com/osscontainertools/kaniko/releases/tag/v1.28.4)
+at verification time; review these unscored findings before approving deployment.
 
 Both lower findings are dependency declarations in the installed `rust-src`
 tree for `nightly-2026-09-04`:
@@ -206,15 +320,16 @@ not match Wolfi. Direct inspection of both images identified two
 [namespace filter](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/fanal/applier/docker.go#L397-L433)
 removes those duplicate records; its
 [deduplication prefers the APK database](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/fanal/applier/docker.go#L251-L283).
-The installed `mongosh` remains in the vulnerability report and SBOM. All 137
-CI and 149 dev installed APK name/version pairs match the generated SBOMs.
+The installed `mongosh` remains in the vulnerability report and SBOM. All 148
+CI and 160 dev installed APK name/version pairs match the generated SBOMs.
 
 There is a narrower **mongosh advisory-feed coverage limitation**: the
 [Wolfi detector](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/detector/ospkg/wolfi/wolfi.go#L31-L56)
-uses the Wolfi advisory source for that retained package. Read-only inspection
-of this scan's frozen database found no `mongosh` package entry in either the
-Wolfi or Chainguard advisory bucket; the CI report also has no separate mongosh
-language scan result. Therefore the zero High/Critical result does not establish
+uses the Wolfi advisory source for that retained package. Earlier read-only inspection
+of the 2026-09-04 database found no `mongosh` package entry in either the
+Wolfi or Chainguard advisory bucket; the CI reports have no separate mongosh
+language scan result. That database-bucket inspection was not repeated for the
+2026-09-05 refresh. Therefore the zero High/Critical result does not establish
 mongosh's vulnerability coverage. This is an advisory-data gap, not evidence of
 an existing vulnerability; review that coverage before treating this scan as a
 complete release assessment.
@@ -229,8 +344,10 @@ Dev Container integration uses real `devcontainer up` with initial, changed,
 mismatched, and large UID/GID scenarios plus socket preservation/restart tests.
 
 Local image smoke tests validate the GitLab shell contract. They do not claim
-that a particular Kubernetes runner or desktop extension host has been tested.
-Run the application pipeline against your runner before promoting its image pin.
+that a particular Kubernetes runner has been tested. The optional browser
+verification additionally exercises a real isolated desktop/remote extension host;
+its receipts and screenshots are retained separately. Run the application pipeline
+against your runner before promoting its image pin.
 
 Each profile describes one architecture at a time. Keep artifacts
 platform-qualified; archive locks/reports and process architecture changes
