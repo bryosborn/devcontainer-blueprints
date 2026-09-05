@@ -1,11 +1,11 @@
 {
-  "name": "wolfi-image-blueprints",
+  "name": "toolbox-image-blueprints",
   "private": true,
   "type": "module",
   "scripts": {
-    "test:vscode-extensions": "node src/wolfi/components/vscode/test-extension-resolver.mjs",
-    "test:wolfi-config": "node scripts/wolfi/test-config.mjs",
-    "test": "node scripts/wolfi/schema.mjs --check && npm run test:wolfi-config && npm run test:vscode-extensions && python3 -m unittest discover -s test/wolfi -p \"test_*.py\" && python3 src/wolfi/vendor-artifacts/scripts/test-vendor.py"
+    "test:vscode-extensions": "node tests/unit/vscode_extension_resolver.mjs",
+    "test:config": "node tests/unit/config.mjs",
+    "test": "node src/config/schema.mjs --check && npm run test:config && npm run test:vscode-extensions && python3 -m unittest discover -s tests/unit -p \"test_*.py\""
   },
   "dependencies": {
     "semver": "^7.7.2",

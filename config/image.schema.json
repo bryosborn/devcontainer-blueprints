@@ -1,0 +1,435 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Toolbox image profile",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 3
+    },
+    "profile": {
+      "enum": [
+        "dev",
+        "build",
+        "kaniko"
+      ]
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "enum": [
+            "linux/amd64",
+            "linux/arm64"
+          ]
+        }
+      },
+      "required": [
+        "platform"
+      ]
+    },
+    "wolfi": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseImage": {
+          "type": "string"
+        },
+        "repositories": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "main": {
+              "type": "string",
+              "format": "uri"
+            },
+            "extra": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "required": [
+            "main",
+            "extra"
+          ]
+        }
+      },
+      "required": [
+        "baseImage",
+        "repositories"
+      ]
+    },
+    "user": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_-]{0,31}$",
+          "not": {
+            "const": "root"
+          }
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "gid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "name",
+        "uid",
+        "gid"
+      ]
+    },
+    "devcontainer": {
+      "type": "boolean",
+      "description": "Editor identity/UID synchronization; requires a named user."
+    },
+    "docker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cli": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "buildx": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Requires docker.cli."
+        },
+        "compose": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "socket": {
+          "type": "boolean",
+          "description": "Socket proxy; requires CLI, named user and devcontainer."
+        }
+      }
+    },
+    "kaniko": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "Maintained osscontainertools release. Run kaniko-build in a disposable root job."
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "vscode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "quality": {
+          "const": "stable"
+        },
+        "extensions": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]+\\.[A-Za-z0-9._-]+$"
+          }
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "native": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clang": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+            }
+          }
+        },
+        "python": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+          }
+        },
+        "java": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "maven": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "node": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "npm": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "rust": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "toolchain": {
+              "type": "string",
+              "pattern": "^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "components": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "rust-src",
+                  "rust-analyzer",
+                  "rustfmt",
+                  "clippy"
+                ]
+              }
+            }
+          },
+          "required": [
+            "toolchain",
+            "components"
+          ]
+        }
+      }
+    },
+    "playwright": {
+      "description": "Optional matched Chromium + headless shell. true selects 1.63.0; requires build.node/npm. No video.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+            }
+          },
+          "required": [
+            "version"
+          ]
+        }
+      ]
+    },
+    "utilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "curl": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "HTTPS and HTTP transfers",
+          "examples": [
+            "latest"
+          ]
+        },
+        "openssh-client": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "SSH client only; no SSH server",
+          "examples": [
+            "latest"
+          ]
+        },
+        "openssh-keygen": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Generate and inspect SSH keys",
+          "examples": [
+            "latest"
+          ]
+        },
+        "openssh-keyscan": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Read SSH host public keys",
+          "examples": [
+            "latest"
+          ]
+        },
+        "unzip": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Extract ZIP archives",
+          "examples": [
+            "latest"
+          ]
+        },
+        "zip": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Create ZIP archives",
+          "examples": [
+            "latest"
+          ]
+        },
+        "less": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Full pager for terminals",
+          "examples": [
+            "latest"
+          ]
+        },
+        "procps": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Process inspection tools",
+          "examples": [
+            "latest"
+          ]
+        },
+        "findutils": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "GNU find and xargs",
+          "examples": [
+            "latest"
+          ]
+        },
+        "rsync": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Incremental file synchronization",
+          "examples": [
+            "latest"
+          ]
+        },
+        "wget": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "GNU HTTP download client",
+          "examples": [
+            "latest"
+          ]
+        },
+        "nano": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Small terminal editor",
+          "examples": [
+            "latest"
+          ]
+        },
+        "bind-tools": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "DNS diagnostics; adds BIND dependencies",
+          "examples": [
+            "latest"
+          ]
+        },
+        "iproute2": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Routing and socket diagnostics; adds networking dependencies",
+          "examples": [
+            "latest"
+          ]
+        },
+        "iputils": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Ping and network path diagnostics",
+          "examples": [
+            "latest"
+          ]
+        },
+        "netcat-openbsd": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "TCP/UDP diagnostics",
+          "examples": [
+            "latest"
+          ]
+        },
+        "kubectl": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Kubernetes client; locked upstream binary",
+          "examples": [
+            "1.37.0"
+          ]
+        },
+        "yq": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "YAML command line editor",
+          "examples": [
+            "4"
+          ]
+        },
+        "helm": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "Kubernetes charts",
+          "examples": [
+            "4"
+          ]
+        },
+        "oras": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "OCI artifact client",
+          "examples": [
+            "1"
+          ]
+        },
+        "mongosh": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "MongoDB shell; Wolfi Extra package",
+          "examples": [
+            "2"
+          ]
+        },
+        "mongodbDatabaseTools": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$",
+          "description": "MongoDB data transfer clients; no database server",
+          "examples": [
+            "100"
+          ]
+        }
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "profile",
+    "image",
+    "wolfi"
+  ]
+}

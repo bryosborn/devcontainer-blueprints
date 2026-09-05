@@ -1,0 +1,293 @@
+{
+  "curl": {
+    "description": "HTTPS and HTTP transfers",
+    "packages": [
+      {
+        "name": "curl",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "curl"
+    ],
+    "exampleSelector": "latest"
+  },
+  "openssh-client": {
+    "description": "SSH client only; no SSH server",
+    "packages": [
+      {
+        "name": "openssh-client",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "ssh",
+      "scp",
+      "sftp"
+    ],
+    "exampleSelector": "latest"
+  },
+  "openssh-keygen": {
+    "description": "Generate and inspect SSH keys",
+    "packages": [
+      {
+        "name": "openssh-keygen",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "ssh-keygen"
+    ],
+    "exampleSelector": "latest"
+  },
+  "openssh-keyscan": {
+    "description": "Read SSH host public keys",
+    "packages": [
+      {
+        "name": "openssh-keyscan",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "ssh-keyscan"
+    ],
+    "exampleSelector": "latest"
+  },
+  "unzip": {
+    "description": "Extract ZIP archives",
+    "packages": [
+      {
+        "name": "unzip",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "unzip"
+    ],
+    "exampleSelector": "latest"
+  },
+  "zip": {
+    "description": "Create ZIP archives",
+    "packages": [
+      {
+        "name": "zip",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "zip"
+    ],
+    "exampleSelector": "latest"
+  },
+  "less": {
+    "description": "Full pager for terminals",
+    "packages": [
+      {
+        "name": "less",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "less"
+    ],
+    "exampleSelector": "latest"
+  },
+  "procps": {
+    "description": "Process inspection tools",
+    "packages": [
+      {
+        "name": "procps",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "ps",
+      "pgrep",
+      "free"
+    ],
+    "exampleSelector": "latest"
+  },
+  "findutils": {
+    "description": "GNU find and xargs",
+    "packages": [
+      {
+        "name": "findutils",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "find",
+      "xargs"
+    ],
+    "exampleSelector": "latest"
+  },
+  "rsync": {
+    "description": "Incremental file synchronization",
+    "packages": [
+      {
+        "name": "rsync",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "rsync"
+    ],
+    "exampleSelector": "latest"
+  },
+  "wget": {
+    "description": "GNU HTTP download client",
+    "packages": [
+      {
+        "name": "wget",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "wget"
+    ],
+    "exampleSelector": "latest"
+  },
+  "nano": {
+    "description": "Small terminal editor",
+    "packages": [
+      {
+        "name": "nano",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "nano"
+    ],
+    "exampleSelector": "latest"
+  },
+  "bind-tools": {
+    "description": "DNS diagnostics; adds BIND dependencies",
+    "packages": [
+      {
+        "name": "bind-tools",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "dig",
+      "nslookup"
+    ],
+    "exampleSelector": "latest"
+  },
+  "iproute2": {
+    "description": "Routing and socket diagnostics; adds networking dependencies",
+    "packages": [
+      {
+        "name": "iproute2",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "ip",
+      "ss"
+    ],
+    "exampleSelector": "latest"
+  },
+  "iputils": {
+    "description": "Ping and network path diagnostics",
+    "packages": [
+      {
+        "name": "iputils",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "ping",
+      "tracepath"
+    ],
+    "exampleSelector": "latest"
+  },
+  "netcat-openbsd": {
+    "description": "TCP/UDP diagnostics",
+    "packages": [
+      {
+        "name": "netcat-openbsd",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "nc"
+    ],
+    "exampleSelector": "latest"
+  },
+  "kubectl": {
+    "description": "Kubernetes client; locked upstream binary",
+    "packages": [],
+    "commands": [
+      "kubectl"
+    ],
+    "exampleSelector": "1.37.0"
+  },
+  "yq": {
+    "description": "YAML command line editor",
+    "packages": [
+      {
+        "name": "yq",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "yq"
+    ],
+    "exampleSelector": "4"
+  },
+  "helm": {
+    "description": "Kubernetes charts",
+    "packages": [
+      {
+        "nameTemplate": "helm-{selector}",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "helm"
+    ],
+    "exampleSelector": "4"
+  },
+  "oras": {
+    "description": "OCI artifact client",
+    "packages": [
+      {
+        "name": "oras",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "oras"
+    ],
+    "exampleSelector": "1"
+  },
+  "mongosh": {
+    "description": "MongoDB shell; Wolfi Extra package",
+    "packages": [
+      {
+        "name": "mongosh",
+        "repository": "extra"
+      }
+    ],
+    "commands": [
+      "mongosh"
+    ],
+    "exampleSelector": "2"
+  },
+  "mongodbDatabaseTools": {
+    "description": "MongoDB data transfer clients; no database server",
+    "packages": [
+      {
+        "name": "mongo-tools",
+        "repository": "main"
+      }
+    ],
+    "commands": [
+      "mongodump",
+      "mongorestore",
+      "bsondump"
+    ],
+    "exampleSelector": "100"
+  }
+}
