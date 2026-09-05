@@ -137,6 +137,10 @@ ClamAV remains commented out until all selected signed packages resolve to
 package had seven unique High CVEs. No ignore or vendor fallback is used, and
 selected software is never silently disabled to obtain a passing scan.
 
+The [capability A/B charts](docs/reports/wolfi-ab-20260905T124704Z/report.md)
+compare CI and dev defaults with Playwright, ClamAV, and the utility selections
+changed individually, using the same frozen vulnerability databases.
+
 ## Offline transfer and cleanup
 
 ```bash

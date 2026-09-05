@@ -336,6 +336,12 @@ complete release assessment.
 
 ## Verification boundaries
 
+The [2026-09-05 capability A/B report](reports/wolfi-ab-20260905T124704Z/report.md)
+contains ten isolated CI/dev configurations, image-size charts, raw and distinct
+advisory counts, and package/finding deltas. Each variant changes one capability
+relative to its profile default. ClamAV-on rows retain their actual security-gate
+results as experimental measurements; the shipped defaults remain unchanged.
+
 `npm test` covers configuration, package selection, resolver/archive behavior,
 and scan/transfer failure cases. Runtime tests run in disposable network-disabled
 containers: language compilation, package tools, Rust offline Cargo and LSP,

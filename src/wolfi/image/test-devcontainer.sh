@@ -505,6 +505,16 @@ for identity in "${IDENTITIES[@]}"; do
   [[ "$(docker exec "${container_id}" getent passwd "${REMOTE_USER}" | cut -d: -f6)" == "/home/${REMOTE_USER}" ]]
 
   if [[ "$SOCKET_ENABLED" == true ]]; then
+    # `devcontainer up` can return as soon as the container is running while
+    # the metadata entrypoint is still creating the proxy socket. Large image
+    # variants make that small startup race easier to hit.
+    for ((attempt = 0; attempt < 100; attempt++)); do
+      if docker exec "${container_id}" test -S /var/run/docker.sock >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.1
+    done
+    docker exec "${container_id}" test -S /var/run/docker.sock
     source_before="$(docker exec "${container_id}" stat -c '%u:%g:%a:%d:%i' /var/run/docker-host.sock)"
   fi
   # The single-quoted script is intentionally expanded by bash in the container;
