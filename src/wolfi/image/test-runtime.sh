@@ -73,6 +73,7 @@ if [ -n "${NODE_SELECTOR}" ]; then
 fi
 if [ -n "${NPM_SELECTOR}" ]; then
   npm --version | grep -Eq "^${NPM_SELECTOR}([.+-]|$)"
+  npx --version | grep -Eq "^${NPM_SELECTOR}([.+-]|$)"
 fi
 
 if [ "${BUILD_ENABLED}" = true ]; then

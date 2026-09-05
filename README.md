@@ -1,85 +1,80 @@
-# Wolfi image blueprints
+# Wolfi CI and development images
 
-Build a reusable CI image and a development image for the same codebase from
-independent YAML configurations. Each configuration produces one image.
+This repository builds two Wolfi images for the same codebase. Each YAML file
+produces one image and has a generated companion lock.
 
-| Configuration | Output | Defaults |
+| Configuration | Image | Purpose |
 | --- | --- | --- |
-| [`config/wolfi-ci.yaml`](config/wolfi-ci.yaml) | `devcontainers/wolfi-ci:0.1.0` | Build tools, everyday utilities, Kaniko, root shell for GitLab jobs |
-| [`config/wolfi-dev.yaml`](config/wolfi-dev.yaml) | `devcontainers/wolfi-dev:0.1.0` | Same build tools/utilities, `vscode` user, VS Code Server, Docker socket access |
+| [`config/wolfi-ci.yaml`](config/wolfi-ci.yaml) | `devcontainers/wolfi-ci:0.1.0` | Root, shell-compatible GitLab job image with Kaniko |
+| [`config/wolfi-dev.yaml`](config/wolfi-dev.yaml) | `devcontainers/wolfi-dev:0.1.0` | `vscode` Dev Container with VS Code and Docker socket access |
 
-Docker, VS Code, Kaniko, Playwright, and individual build/utility selections are
-optional. Comment out a selection to disable it. Both examples target `linux/amd64`; `linux/arm64` is
-also supported. Local image tags live in the host Docker daemon image store.
+Both profiles enable the same compiler/language stack, Playwright, and every
+reviewed utility. ClamAV is the sole disabled utility because Wolfi currently
+resolves a vulnerable build. The role-specific difference is intentional: CI
+has Kaniko; dev has VS Code, a named user, and Docker client/socket support.
 
-## Getting started
+## Build and verify
 
-Open this repository in its Dev Container with Docker and VS Code's Dev
-Containers extension available on the host. The connected Wolfi bootstrap
-provides the preparation tools independently of the generated images. It uses
-the host architecture and requires host Docker socket access.
+Use the repository Dev Container, or Linux with Docker/BuildKit, Node/npm,
+Python 3.10+, jq, GNU tar/coreutils, Git, and the Dev Containers CLI. Kaniko
+lock updates require Cosign 3. Full tests require passwordless sudo and
+`setpriv`; scans require Trivy, and repository linting uses ShellCheck.
 
-Alternatively, prepare on Linux with Docker/BuildKit, Node/npm, Python 3.10+, jq,
-GNU coreutils/tar, gzip, Git, and the Dev Containers CLI. Full checks also use
-ShellCheck, Trivy, passwordless sudo, and `setpriv`. Resolving Kaniko also requires
-Cosign 3.1.3, supplied by the bootstrap.
+Install the resolver dependency once:
 
 ```bash
 npm ci
-./scripts/wolfi.sh update-lock --config config/wolfi-ci.yaml
-./scripts/wolfi.sh update-lock --config config/wolfi-dev.yaml
 ```
 
-Review the generated companion locks, then build, test, and scan each profile:
+For each profile, resolve its mutable inputs, verify/download the locked
+artifacts, build offline, run runtime tests, and scan:
 
 ```bash
+./scripts/wolfi.sh update-lock --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh prefetch --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh build --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh test --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh scan --config config/wolfi-ci.yaml
 
+./scripts/wolfi.sh update-lock --config config/wolfi-dev.yaml
 ./scripts/wolfi.sh prefetch --config config/wolfi-dev.yaml
 ./scripts/wolfi.sh build --config config/wolfi-dev.yaml
 ./scripts/wolfi.sh test --config config/wolfi-dev.yaml
 ./scripts/wolfi.sh scan --config config/wolfi-dev.yaml
 ```
 
-`update-lock` resolves mutable selectors. Subsequent commands require the
-matching lock and verified artifacts. Image installation and runtime smokes
-run with networking disabled. `test --quick` retains runtime/server checks
-while reducing the identity matrix and skipping disposable VSIX installation.
+`update-lock` is the only operation that selects mutable versions. The other
+operations require matching YAML, lock, and artifact hashes. Image construction
+and runtime checks consume artifacts with networking disabled.
 
-## Configuration
+The latest results for both complete profiles are in the
+[CVE report](docs/cve-report.md).
 
-A minimal configuration is:
+## Configure software
 
-```yaml
-schemaVersion: 2
-image:
-  reference: devcontainers/my-ci:0.1.0
-  platform: linux/amd64
-artifacts:
-  root: artifacts/my-ci
-wolfi:
-  baseImage: cgr.dev/chainguard/wolfi-base:latest
-  repositories:
-    main: https://apk.cgr.dev/chainguard
-    extra: https://apk.cgr.dev/extra-packages
-```
+The two YAML files deliberately have the same section order. Comment out an
+entry to omit it, or change its selector and run `update-lock` again.
 
-It contains the small shell/utility baseline and runs as root. Add optional
-sections from either example to select languages, Docker tooling, or VS Code.
-Each YAML needs its own non-overlapping artifact root. There is no YAML
-inheritance or fixed CI/dev role in the builder.
+- `build` selects native compilation, Python, Java/Maven, Node/npm, and Rust.
+- `utilities` selects reviewed Wolfi packages and the locked kubectl binary.
+- `playwright` installs matched Chromium and headless-shell artifacts.
+- `kaniko` adds the signed executor and wrapper used by the CI image.
+- `docker`, `vscode`, `user`, and `devcontainer` provide development behavior.
 
-See [the configuration and security guide](docs/wolfi.md) for optionality,
-locking, runtime behavior, scans, and architecture details.
-The [Ubuntu/Wolfi software comparison](docs/software-comparison.md) lists the
-previous Ubuntu image's software beside the current Wolfi CI/dev inventories.
+Node 24 is installed from Wolfi's signed `nodejs-24` package. The signed
+`npm-12` package supplies npm and npx, while `corepack` supplies Corepack; the
+runtime tests verify all four commands. Exact versions are recorded in each lock.
 
-## Using the images
+The schema rejects unknown fields, unsafe paths, invalid dependency
+combinations, YAML aliases, and unsupported platforms. Both examples target
+`linux/amd64`; `linux/arm64` is also supported one profile at a time.
 
-For development, a consuming `.devcontainer/devcontainer.json` can contain:
+See the [Wolfi guide](docs/wolfi.md) for the complete configuration contract,
+offline supply rules, Dev Container identity, Kaniko, and Playwright behavior.
+
+## Consume the images
+
+A project Dev Container can use the development image directly:
 
 ```json
 {
@@ -88,83 +83,47 @@ For development, a consuming `.devcontainer/devcontainer.json` can contain:
 }
 ```
 
-The image carries its Dev Container user and optional socket metadata. The VSIX
-archive remains uninstalled in the user's home. After connecting, run
-`~/install-vscode-extensions.sh` when the profile includes extensions.
+The image contains an uninstalled, verified VSIX archive. Run
+`~/install-vscode-extensions.sh` after connecting when those extensions are
+wanted in the container.
 
-GitLab application jobs use the CI image without a Docker socket, daemon, or
-privileged container. Compile/test and image packaging run in separate jobs,
-passing application outputs through GitLab artifacts. The [GitLab example](examples/gitlab-ci.yml)
-accepts two approved digest-pinned image inputs: select the same Kaniko-enabled
-Wolfi CI digest for both, or use a dedicated shell-capable Kaniko image for
-packaging. Credentials stay in GitLab configuration. Include the example with
-explicit `ci-image` and `kaniko-image` inputs; mandatory inputs are checked at
-pipeline creation ([GitLab inputs](https://docs.gitlab.com/ci/inputs/)).
-Producing reusable Wolfi images locally still uses Docker/BuildKit.
+For GitLab, use the CI image by immutable digest in an ordinary compile/test
+job. Pass application outputs as GitLab artifacts to a separate disposable
+Kaniko packaging job. Run Kaniko as root without privileged mode, keep the
+build context on a mount or below `/kaniko`, and provide registry credentials
+through GitLab variables. The repository does not carry a project-specific
+`.gitlab-ci.yml` because runner type, registry, credentials, and job commands
+belong to the consuming project.
 
-## Choosing optional software
+Do not run `kaniko-build` in the attached development container. Kaniko
+temporarily replaces parts of its job filesystem and is intended for an
+isolated, disposable CI job.
 
-The examples have parallel blocks and a shared editor schema. `build` contains
-native C/C++ tools and language runtimes; `utilities` offers reviewed native
-Wolfi packages. Curl, SSH client/key tools, ZIP tools, less, procps and findutils
-are enabled in both. DNS/network diagnostics are commented out because they
-add dependencies. There is no broad networking bundle and no arbitrary Alpine
-package mixing. The catalog guides compatible choices; fresh raw scans still
-determine CVE acceptance, including unfixed findings.
+## Transfer or clean a profile
 
-Enable browser testing with `playwright: true`, or pin
-`playwright: {version: "1.63.0"}`. Both examples leave it disabled. It requires
-`build.node` and `build.npm`, installs matched official Chromium and headless-shell
-binaries plus signed Wolfi libraries and focused fonts, and sets
-`PLAYWRIGHT_BROWSERS_PATH`. Declare the **same exact** `@playwright/test` version
-in your application and retain its npm lock/dependency cache. Screenshots,
-traces and headed tests through `xvfb-run` are supported; video/FFmpeg, Firefox
-and WebKit are excluded. Wolfi is not an officially supported Playwright OS;
-this repository verifies its selected combination. See [browser verification](docs/wolfi.md#playwright).
-
-`kaniko: {version: "1.28.4"}` selects the maintained osscontainertools fork.
-`kaniko-build` enforces its filesystem preservation/cleanup flags and requires
-root. Run it in a **disposable job**, with context on a mount or under `/kaniko`.
-It temporarily replaces the job container's filesystem; interrupted cleanup
-cannot guarantee restoration. Never run it inside your live editor container.
-The root CI default supports this workflow. Root is not required for compilation
-itself; omit Kaniko and configure a named user if your runner enforces non-root.
-The intended Kubernetes runner permits UID 0 with `privileged=false`; actual
-cluster policy and registry access must be checked during deployment.
-
-ClamAV remains commented out until all selected signed packages resolve to
-`1.5.4-r0` or newer and pass build/test/raw scanning. The retained `1.5.2-r7`
-package had seven unique High CVEs. No ignore or vendor fallback is used, and
-selected software is never silently disabled to obtain a passing scan.
-
-The [capability A/B charts](docs/reports/wolfi-ab-20260905T124704Z/report.md)
-compare CI and dev defaults with Playwright, ClamAV, and the utility selections
-changed individually, using the same frozen vulnerability databases.
-
-## Offline transfer and cleanup
+Create and verify an offline bundle:
 
 ```bash
 ./scripts/wolfi.sh package --config config/wolfi-ci.yaml
 sha256sum -c artifacts-wolfi-ci-linux-amd64.tar.gz.sha256
-# Transfer the repository, bundle, and checksum to the disconnected machine.
+```
+
+After transferring the repository, bundle, and checksum:
+
+```bash
 tar -xzf artifacts-wolfi-ci-linux-amd64.tar.gz
 ./scripts/wolfi.sh load --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh build --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh test --config config/wolfi-ci.yaml
 ```
 
-Repeat for the dev profile as needed. Each bundle contains its configuration,
-lock, exact base/APK/vendor supply, and one output image. Loading validates
-hashes and image identity before importing Docker images.
+Cleanup is profile-scoped; Docker image removal is explicit:
 
 ```bash
 ./scripts/wolfi.sh clean --config config/wolfi-ci.yaml --dry-run
 ./scripts/wolfi.sh clean --config config/wolfi-ci.yaml
 ./scripts/wolfi.sh clean --config config/wolfi-ci.yaml --docker-images
 ```
-
-Cleanup targets the selected profile's artifacts and bundle. Docker image
-removal is opt-in and non-forced.
 
 ## Repository checks
 
@@ -173,7 +132,3 @@ npm test
 find scripts src/wolfi -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 find scripts src/wolfi -type f -name '*.sh' -print0 | xargs -0 shellcheck -x
 ```
-
-Ubuntu, APT, WSL artifact setup, fixed intermediate output images, and the
-Ubuntu/Wolfi comparison workflow have been retired on this branch. Schema-v1
-configs and commands are replaced by the explicit profile interface above.

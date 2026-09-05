@@ -64,7 +64,7 @@ class ApkProfileTests(unittest.TestCase):
     def test_ci_has_tools_without_dev_runtime_roots(self):
         roots, modules = self.roots(self.profiles["ci"])
         names = {root["name"] for root in roots}
-        self.assertEqual(modules, ["base", "build", "utilities"])
+        self.assertEqual(modules, ["base", "build", "utilities", "playwright"])
         self.assertTrue({"bash", "grep", "git", "jq", "gnutar", "gzip"} <= names)
         self.assertTrue({"docker-cli", "docker-cli-buildx", "docker-compose", "socat", "sudo", "shadow"}.isdisjoint(names))
 
@@ -95,6 +95,7 @@ class ApkProfileTests(unittest.TestCase):
         config = copy.deepcopy(self.profiles["ci"])
         config["build"] = {}
         config["utilities"] = {}
+        del config["playwright"]
         roots, modules = self.roots(config)
         self.assertEqual(modules, ["base"])
         self.assertTrue(all(root["module"] == "base" for root in roots))

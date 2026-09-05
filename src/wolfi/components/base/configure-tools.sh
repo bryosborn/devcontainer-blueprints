@@ -56,7 +56,7 @@ required_commands="jq"
 [ "${java_enabled}" = true ] && required_commands="${required_commands} java javac"
 [ "${maven_enabled}" = true ] && required_commands="${required_commands} mvn"
 [ "${node_enabled}" = true ] && required_commands="${required_commands} node corepack"
-[ "${npm_enabled}" = true ] && required_commands="${required_commands} npm"
+[ "${npm_enabled}" = true ] && required_commands="${required_commands} npm npx"
 [ "${clamav_enabled}" = true ] && required_commands="${required_commands} clamscan"
 [ "${yq_enabled}" = true ] && required_commands="${required_commands} yq"
 

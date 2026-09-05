@@ -157,10 +157,11 @@ UID 0 with `privileged=false`. Runner admission policies, storage permissions,
 network policy, registry authentication, and application dependency caches
 remain deployment inputs.
 
-The [example pipeline](../examples/gitlab-ci.yml) passes compile/test artifacts
-to a separate disposable package job. Its two required, digest-validated inputs
-can select the same Kaniko-enabled CI image or an approved dedicated shell-capable
-Kaniko image. Registry credentials are supplied at job runtime.
+Use the CI image by immutable digest for compile/test work, then pass application
+outputs through GitLab artifacts to a separate disposable Kaniko job. Keep runner,
+registry, credential, cache, and project command details in the consuming
+project's pipeline. This repository intentionally does not ship a generic
+`.gitlab-ci.yml` that would imply those deployment choices are portable.
 
 The optional `kaniko.version` selects [osscontainertools 1.28.4](https://github.com/osscontainertools/kaniko/releases/tag/v1.28.4).
 Resolution verifies its exact release-workflow Cosign identity, records the
@@ -181,7 +182,7 @@ Local image manufacturing remains Docker/BuildKit-based.
 
 ## Playwright
 
-Both defaults comment out `playwright: true`. It selects the repository-maintained
+Both examples enable `playwright: true`. It selects the repository-maintained
 compatibility target 1.63.0; `{version: "1.63.0"}` pins it explicitly. The project
 must declare that exact `@playwright/test` version with frozen npm dependencies.
 The image installs browser/runtime prerequisites, not a competing global test runner.
@@ -213,36 +214,8 @@ not part of this check. The implementing assistant reviews the original PNGs
 with image vision and records the review with their hashes. A passing command
 alone is insufficient visual evidence.
 
-The 2026-09-05 acceptance used Playwright 1.63.0 and Chromium 153.0.8010.12,
-revision 1243. The isolated AMD64 CI profile passed headless shell, full Chromium
-and headed Xvfb tests as root; an ARM64 profile passed the same three modes.
-The AMD64 dev profile passed all three modes as root, `vscode` (1000:1000),
-and the changed developer identity (2101:3201): 18 browser tests in total.
-The separate official VS Code 1.136.1 client with Dev Containers 0.468.0 opened
-the AMD64 dev fixture as `vscode` (1000:1000) and ran the real workspace task:
-two tests passed, with no failed, skipped or flaky tests. Client and target
-networking were disabled; the browser target had private 1 GiB shared memory
-and no Docker socket or privileged mode.
-
-Direct AI inspection of the original desktop/mobile PNGs confirmed the local
-blue/orange/green artwork, readable CJK/Thai text and colored emoji, responsive
-layout, and changed form response without missing assets or clipping. The
-[VS Code receipt](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/acceptance.json),
-[visual review](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/visual-review.json),
-[desktop screenshot](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/workspace/results/desktop.png)
-and [mobile screenshot](../artifacts/wolfi/playwright-dev/linux-amd64/reports/vscode/workspace/results/mobile.png)
-are retained locally with hashes and traces. These ignored artifacts are generated
-evidence; the [harness instructions](../test/wolfi/playwright-vscode/README.md)
-describe reproducing the check. Headed Xvfb logs retain nonfatal multimedia-key
-warnings; desktop logs retain offline Marketplace/DBus diagnostics. No application
-errors or remote-server permission failures occurred in the acceptance run.
-
-The isolated AMD64 Playwright images measured 1,648,795,189 bytes for CI and
-2,661,319,087 bytes for dev. The dev browser profile disables socket support for
-testing, so its size difference from the default dev image is not a pure browser
-addition. Their [CI scan](../artifacts/wolfi/playwright-ci/linux-amd64/reports/scan/report.md)
-and [dev scan](../artifacts/wolfi/playwright-dev/linux-amd64/reports/scan/report.md)
-added no findings to the default profiles' counts.
+Current browser versions, runtime results, image sizes, and vulnerability counts
+are recorded with the complete profiles in the [CVE report](cve-report.md).
 
 Trivy may not identify advisories in a downloaded Chromium binary. Reports must
 retain browser identity and state this coverage limitation: zero raw findings
@@ -274,73 +247,12 @@ result and cannot claim PASS. Before validation or scanning starts, previous
 canonical acceptance output is invalidated; fresh reports are staged and
 verified before publication. Build/test success alone is not CVE acceptance.
 
-### Observed scans on 2026-09-05
-
-The final AMD64 examples passed the raw High/Critical gate with Trivy 0.74.0
-and identical frozen vulnerability/Java databases updated on 2026-09-05.
-
-| Image | Size (Docker inspect bytes) | Critical | High | Medium | Low | Unscored |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| [CI report](../artifacts/wolfi/ci/linux-amd64/reports/scan/report.md) | 1,230,412,030 | 0 | 0 | 1 | 1 | 3 |
-| [Dev report](../artifacts/wolfi/dev/linux-amd64/reports/scan/report.md) | 2,243,248,944 | 0 | 0 | 1 | 1 | 0 |
-
-Raw JSON, CSV, CycloneDX SBOMs, exact image IDs, report hashes and scanner/database
-provenance are retained beside these reports. These are results for those inputs,
-not a claim of complete vulnerability coverage. Docker's reported image size can
-differ from its disk-usage display and from compressed transfer bundle size.
-
-Kaniko 1.28.4 adds three unscored findings against its embedded
-`golang.org/x/crypto v0.55.0`: `CVE-2026-56855`, `CVE-2026-78662`, and
-[GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932). The first two raw records
-report SSH deadlock issues fixed in v0.56.0; the third concerns the unmaintained
-OpenPGP package with no fixed version. Module presence does not establish symbol
-reachability, and reachability has not been proven here. All findings remain
-visible, without ignores. Version 1.28.4 was still the
-[latest published maintained release](https://github.com/osscontainertools/kaniko/releases/tag/v1.28.4)
-at verification time; review these unscored findings before approving deployment.
-
-Both lower findings are dependency declarations in the installed `rust-src`
-tree for `nightly-2026-09-04`:
-
-| Finding | Declared package | Source lockfile below `lib/rustlib/src/rust/library/` | Fixed release |
-| --- | --- | --- | --- |
-| [GHSA-cq8v-f236-94qc](https://github.com/advisories/GHSA-cq8v-f236-94qc), Low | `rand` 0.9.2 | `portable-simd/Cargo.lock` | 0.9.3 |
-| [GHSA-7gcf-g7xr-8hxj](https://github.com/advisories/GHSA-7gcf-g7xr-8hxj), Medium | `serde_with` 3.18.0 | `stdarch/Cargo.lock` | 3.21.0 |
-
-These source lockfiles are dormant during the image's normal shell/tool startup;
-their presence does not establish that either dependency is linked into a
-delivered executable. Building the bundled source or reusing these dependencies
-requires a separate reachability review. Both findings remain visible without
-an ignore or VEX suppression.
-
-Trivy also reports two OS records skipped because their PURL namespace does
-not match Wolfi. Direct inspection of both images identified two
-`pkg:apk/chainguard/mongosh@2.10.0-r1` records in the embedded
-`/var/lib/db/sbom/mongosh-2.10.0-r1.spdx.json`. Trivy's
-[namespace filter](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/fanal/applier/docker.go#L397-L433)
-removes those duplicate records; its
-[deduplication prefers the APK database](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/fanal/applier/docker.go#L251-L283).
-The installed `mongosh` remains in the vulnerability report and SBOM. All 148
-CI and 160 dev installed APK name/version pairs match the generated SBOMs.
-
-There is a narrower **mongosh advisory-feed coverage limitation**: the
-[Wolfi detector](https://github.com/aquasecurity/trivy/blob/v0.74.0/pkg/detector/ospkg/wolfi/wolfi.go#L31-L56)
-uses the Wolfi advisory source for that retained package. Earlier read-only inspection
-of the 2026-09-04 database found no `mongosh` package entry in either the
-Wolfi or Chainguard advisory bucket; the CI reports have no separate mongosh
-language scan result. That database-bucket inspection was not repeated for the
-2026-09-05 refresh. Therefore the zero High/Critical result does not establish
-mongosh's vulnerability coverage. This is an advisory-data gap, not evidence of
-an existing vulnerability; review that coverage before treating this scan as a
-complete release assessment.
+The repository keeps one checked-in [CVE report](cve-report.md) for the complete
+CI and dev profiles. Per-run raw JSON, CycloneDX SBOMs, CSV, and scanner metadata
+are generated below each profile's ignored artifact root and can be retained by
+a release system when deeper evidence is required.
 
 ## Verification boundaries
-
-The [2026-09-05 capability A/B report](reports/wolfi-ab-20260905T124704Z/report.md)
-contains ten isolated CI/dev configurations, image-size charts, raw and distinct
-advisory counts, and package/finding deltas. Each variant changes one capability
-relative to its profile default. ClamAV-on rows retain their actual security-gate
-results as experimental measurements; the shipped defaults remain unchanged.
 
 `npm test` covers configuration, package selection, resolver/archive behavior,
 and scan/transfer failure cases. Runtime tests run in disposable network-disabled

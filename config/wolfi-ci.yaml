@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./wolfi.schema.json
 # One YAML produces one image. Select it with ./scripts/wolfi.sh COMMAND --config FILE.
 # After edits run update-lock, then prefetch, build, test and scan. Locks are generated.
-# Both examples have the same order: uncomment complete blocks and change selectors.
+# Both examples have the same order: comment out components or change selectors.
 # Omitted components are disabled. APK selectors are literal versions/lines or latest;
 # the resolver locks exact signed Wolfi packages and rejects unavailable selections.
 # Use the reviewed utilities below (editor completion describes each package).
@@ -87,7 +87,7 @@ build:
       - rustfmt
       - clippy
 
-# playwright: true
+playwright: true
 
 utilities:
   curl: latest
@@ -105,11 +105,11 @@ utilities:
   oras: "1"
   mongosh: "2"
   mongodbDatabaseTools: "100"
-  # rsync: latest
-  # wget: latest
-  # nano: latest
-  # bind-tools: latest
-  # iproute2: latest
-  # iputils: latest
-  # netcat-openbsd: latest
+  rsync: latest
+  wget: latest
+  nano: latest
+  bind-tools: latest
+  iproute2: latest
+  iputils: latest
+  netcat-openbsd: latest
   # clamav: "1.5"
